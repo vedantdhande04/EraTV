@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
   <meta name="description" content="EraTV — Time-travel through decades of Bollywood music on a vintage CRT television." />
   <title>EraTV — Time Travel TV</title>
@@ -52,6 +52,7 @@
 
     html, body {
       height: 100%;
+      height: 100dvh;
       overflow: hidden;
     }
 
@@ -85,8 +86,9 @@
        4. SCENE LAYOUT
        ============================================================ */
     .scene {
-      width: 100vw;
-      height: 100vh;
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
       overflow: hidden;
       position: relative;
       /* Fallback color matching the TV image bg, only visible during load */
@@ -961,6 +963,9 @@
       .share-card.is-open { width: min(260px, calc(100vw - 24px)); }
     }
 
+    body.is-phone .tv-img {
+      object-position: center 78%;
+    }
     body.is-phone .brand-tag { display: none; }
     body.is-phone .online-pill {
       top: 10px;
@@ -981,7 +986,7 @@
       text-overflow: ellipsis;
     }
     body.is-phone .bottom-chrome {
-      padding: 0 8px 10px;
+      padding: 0 8px calc(10px + env(safe-area-inset-bottom, 0px));
       gap: 6px;
     }
     body.is-phone .era-menu {
@@ -994,9 +999,11 @@
       padding: 6px 1px;
     }
     body.is-phone .player-bar {
-      padding: 7px 10px;
+      padding: 6px 8px;
       border-radius: 18px;
+      gap: 8px;
     }
+    body.is-phone .art { width: 40px; height: 40px; }
 
     /* ============================================================
        13. PAGE LOAD ANIMATION
@@ -1432,12 +1439,13 @@
       const cRatio = cW / cH;
       const iRatio = iW / iH;
 
+      const posY = isPhoneLayout() ? 0.78 : 0.5;
       let rW, rH, oX, oY;
       if (cRatio > iRatio) {
         rW = cW;
         rH = cW / iRatio;
         oX = 0;
-        oY = (cH - rH) / 2;
+        oY = (cH - rH) * posY;
       } else {
         rH = cH;
         rW = cH * iRatio;
@@ -1494,13 +1502,17 @@
       shareCard.style.right = (window.innerWidth <= 480 ? 10 : 14) + "px";
     }
 
-    tvImg.addEventListener("load", syncBackground);
-    window.addEventListener("resize", function () {
+    function relayout() {
       syncBackground();
       positionShareCard();
-    });
-    syncBackground();
-    positionShareCard();
+    }
+
+    tvImg.addEventListener("load", relayout);
+    window.addEventListener("resize", relayout);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", relayout);
+    }
+    relayout();
 
     /* ==========================================================
        UTILITIES
