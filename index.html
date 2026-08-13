@@ -1,0 +1,2302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta name="description" content="EraTV — Time-travel through decades of Bollywood music on a vintage CRT television." />
+  <title>EraTV — Time Travel TV</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Righteous&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <style>
+    /* ============================================================
+       1. CUSTOM PROPERTIES
+       ============================================================ */
+    :root {
+      /* Scene */
+      --bg-warm:    #d98020;
+      --bg-light:   #e89830;
+      --bg-dark:    #a85808;
+
+      /* Plastic palette (TV / remote) */
+      --yellow-hi:  #edc850;
+      --yellow-mid: #dbb228;
+      --yellow-lo:  #c09418;
+      --yellow-dk:  #9a7812;
+
+      /* Text on warm bg */
+      --ink-dark:   #3d2810;
+      --ink-warm:   rgba(80, 50, 15, 0.55);
+
+      /* Player bar */
+      --bar-bg:     #1e1508;
+      --bar-border: rgba(196, 151, 58, 0.55);
+      --bar-text:   #f5e6c8;
+      --bar-muted:  rgba(245, 230, 200, 0.6);
+      --bar-accent: #e8c36a;
+
+      /* Measured transparent hole in bg_main.png (2752×1536) */
+      --scr-top:    30.46875%;
+      --scr-left:   37.20930%;
+      --scr-width:  25.18169%;
+      --scr-height: 38.28125%;
+    }
+
+    /* ============================================================
+       2. RESET
+       ============================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: Figtree, system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      background: var(--bg-warm);
+      color: #fff;
+    }
+
+    /* ============================================================
+       3. HIDDEN YOUTUBE PLAYER
+       ============================================================ */
+    .yt-offscreen {
+      pointer-events: none;
+      position: fixed;
+      left: -9999px;
+      top: 0;
+      width: 320px;
+      height: 180px;
+      overflow: hidden;
+      opacity: 0;
+    }
+    .yt-offscreen iframe {
+      width: 320px;
+      height: 180px;
+      border: 0;
+    }
+
+    /* ============================================================
+       4. SCENE LAYOUT
+       ============================================================ */
+    .scene {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+      /* Fallback color matching the TV image bg, only visible during load */
+      background: #c9a056;
+    }
+
+    .scene-content {
+      position: absolute;
+      inset: 0;
+    }
+
+    /* ============================================================
+       5. BRAND TAG
+       ============================================================ */
+    .brand-tag {
+      position: fixed;
+      top: 14px;
+      left: 18px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--ink-warm);
+      z-index: 50;
+      user-select: none;
+    }
+
+    .online-pill {
+      position: fixed;
+      top: 32px;
+      left: 44px;
+      z-index: 50;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      color: #fff;
+      background: rgba(22, 16, 12, 0.38);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      box-shadow:
+        0 10px 36px rgba(0, 0, 0, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(28px) saturate(140%);
+      -webkit-backdrop-filter: blur(28px) saturate(140%);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      user-select: none;
+    }
+    .online-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #1ed760;
+      box-shadow: 0 0 8px rgba(30, 215, 96, 0.7);
+      animation: pulse-dot 2.2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.55; transform: scale(0.86); }
+    }
+
+    .spotify-pill {
+      position: fixed;
+      top: 32px;
+      right: 44px;
+      z-index: 50;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      max-width: calc(100vw - 36px);
+      padding: 8px 12px 8px 10px;
+      border-radius: 999px;
+      text-decoration: none;
+      color: #fff;
+      background: rgba(22, 16, 12, 0.38);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      box-shadow:
+        0 10px 36px rgba(0, 0, 0, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(28px) saturate(140%);
+      -webkit-backdrop-filter: blur(28px) saturate(140%);
+      transition: background 0.2s ease, transform 0.15s ease, border-color 0.2s ease;
+    }
+    .spotify-pill:hover {
+      background: rgba(22, 16, 12, 0.5);
+      border-color: rgba(30, 215, 96, 0.55);
+      transform: scale(1.02);
+    }
+    .spotify-pill-logo {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      color: #1ed760;
+    }
+    .spotify-pill-text {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+    .spotify-pill-arrow {
+      width: 13px;
+      height: 13px;
+      flex-shrink: 0;
+      opacity: 0.85;
+    }
+
+    .share-card {
+      position: fixed;
+      right: 22px;
+      bottom: 22px;
+      z-index: 40;
+      width: 240px;
+      padding: 10px 12px 10px;
+      border-radius: 22px;
+      color: #fff;
+      background: rgba(22, 16, 12, 0.38);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      box-shadow:
+        0 10px 36px rgba(0, 0, 0, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(28px) saturate(140%);
+      -webkit-backdrop-filter: blur(28px) saturate(140%);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transform: translateY(18px);
+      transition:
+        opacity 0.4s ease,
+        transform 0.4s ease,
+        visibility 0.4s ease,
+        width 0.32s ease,
+        padding 0.32s ease;
+    }
+    .share-card.is-visible {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+    .share-card.is-open {
+      width: 260px;
+      padding: 12px 14px;
+    }
+    .share-card-title {
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.35;
+      letter-spacing: 0.01em;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+      margin-bottom: 8px;
+    }
+    .share-card.is-open .share-card-title {
+      margin-bottom: 10px;
+    }
+    .share-card-fields {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 0;
+      margin: 0;
+      opacity: 0;
+      overflow: hidden;
+      transform: translateY(-6px);
+      pointer-events: none;
+      transition:
+        max-height 0.32s ease,
+        opacity 0.28s ease,
+        margin 0.28s ease,
+        transform 0.28s ease;
+    }
+    .share-card.is-open .share-card-fields {
+      max-height: 140px;
+      margin-bottom: 8px;
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+    .share-card-form {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .share-card.is-open .share-card-form {
+      gap: 8px;
+    }
+    .share-card-input {
+      width: 100%;
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      padding: 9px 11px;
+      font-family: inherit;
+      font-size: 12px;
+      color: #fff;
+      background: rgba(0, 0, 0, 0.28);
+      outline: none;
+    }
+    .share-card-input::placeholder {
+      color: rgba(255, 255, 255, 0.45);
+    }
+    .share-card-input:focus {
+      border-color: rgba(30, 215, 96, 0.7);
+    }
+    .share-card-submit {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 800;
+      color: #04120a;
+      background: #1ed760;
+      cursor: pointer;
+    }
+    .share-card-submit:hover:not(:disabled) {
+      filter: brightness(1.06);
+    }
+    .share-card-submit:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+    .share-card-status {
+      min-height: 0;
+      margin-top: 0;
+      font-size: 11px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.78);
+    }
+    .share-card-status:not(:empty) {
+      margin-top: 6px;
+    }
+    .share-card-status.is-ok { color: #1ed760; }
+    .share-card-status.is-err { color: #ffb4b4; }
+
+    /* ============================================================
+       6. FILE WARNING
+       ============================================================ */
+    .file-warning {
+      display: none;
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 480px;
+      width: calc(100% - 32px);
+      padding: 8px 14px;
+      background: rgba(42, 34, 8, 0.85);
+      border: 1px solid rgba(232, 195, 106, 0.5);
+      color: #f0c674;
+      border-radius: 12px;
+      font-size: 0.75rem;
+      text-align: center;
+      z-index: 100;
+      backdrop-filter: blur(8px);
+    }
+
+    /* ============================================================
+       7. TV IMAGE — full viewport cover
+       ============================================================ */
+    .tv-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      z-index: 2;          /* ON TOP — content shows through transparent screen */
+      user-select: none;
+      -webkit-user-drag: none;
+      pointer-events: none; /* clicks pass through to screen & remote below */
+    }
+
+    /* ============================================================
+       8. TV SCREEN — sits BEHIND the TV image
+       ============================================================ */
+    .tv-screen {
+      position: absolute;
+      /* JS sets top/left/width/height dynamically via positionScreen() */
+      overflow: hidden;
+      z-index: 1;          /* BEHIND the TV image */
+      background: #000;
+      -webkit-mask-image: url("screen-hole-mask.png");
+      mask-image: url("screen-hole-mask.png");
+      -webkit-mask-size: 100% 100%;
+      mask-size: 100% 100%;
+      -webkit-mask-repeat: no-repeat;
+      mask-repeat: no-repeat;
+      -webkit-mask-position: center;
+      mask-position: center;
+    }
+
+    .screen-video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      z-index: 3;
+      display: none;
+      background: #000;
+    }
+    .screen-video.is-on {
+      display: block;
+      filter: contrast(1.12) saturate(1.08) brightness(0.93);
+    }
+    .tv-screen.has-video .screen-content { opacity: 0; }
+
+    /* Screen glow (bleeds beyond bezel) */
+    .tv-glow {
+      position: absolute;
+      /* JS positions this too */
+      border-radius: 12px;
+      z-index: 0;          /* behind everything */
+      pointer-events: none;
+      filter: blur(22px);
+      opacity: 0.25;
+      transition: background 0.6s ease;
+    }
+
+    /* ---- screen layers (stacked bottom-to-top) ---- */
+
+    .screen-bg {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      transition: background 0.5s ease;
+    }
+
+    .screen-content {
+      position: absolute;
+      inset: 0;
+      z-index: 7;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 8%;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    .screen-content.transitioning { opacity: 0; }
+
+    .tv-screen.is-now .screen-content { opacity: 1; }
+    .tv-screen.is-now .era-badge { display: none; }
+    .tv-screen.is-now .era-tagline {
+      display: inline-block;
+      max-width: 14em;
+      padding: 8px 12px;
+      border-radius: 8px;
+      color: #fff;
+      opacity: 1;
+      font-size: clamp(0.62rem, 1.25vw, 0.82rem);
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      line-height: 1.4;
+      text-align: center;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+      background: rgba(0, 0, 0, 0.62);
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+    }
+    .tv-screen.is-now .screen-noise,
+    .tv-screen.is-now .screen-noise.active { opacity: 0.7; }
+
+    .era-badge {
+      font-family: 'Righteous', cursive;
+      font-size: clamp(2rem, 5vw, 4.5rem);
+      line-height: 1;
+      transition: color 0.4s, text-shadow 0.4s;
+    }
+
+    .era-tagline {
+      font-size: clamp(0.55rem, 1.2vw, 0.85rem);
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      opacity: 0.8;
+    }
+
+    /* Noise canvas */
+    .screen-noise {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      image-rendering: pixelated;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 6;
+      transition: opacity 0.15s ease;
+    }
+    .screen-noise.active { opacity: 0.75; }
+
+    /* CRT glass — between video and the TV PNG, clipped to the hole */
+    .screen-fx {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 8;
+    }
+
+    .screen-fx-scan {
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.22) 0px,
+        rgba(0, 0, 0, 0.22) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+      opacity: 0.4;
+    }
+
+    .screen-fx-rgb {
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        90deg,
+        rgba(255, 40, 40, 0.035) 0px,
+        rgba(40, 255, 80, 0.03) 1px,
+        rgba(40, 80, 255, 0.035) 2px,
+        transparent 3px
+      );
+      mix-blend-mode: overlay;
+    }
+
+    .screen-fx-grain {
+      position: absolute;
+      inset: 0;
+      opacity: 0.16;
+      mix-blend-mode: overlay;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size: 160px 160px;
+    }
+
+    .screen-fx-vignette {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        ellipse 78% 72% at 50% 48%,
+        transparent 38%,
+        rgba(0, 0, 0, 0.22) 70%,
+        rgba(0, 0, 0, 0.58) 100%
+      );
+      box-shadow:
+        inset 0 0 48px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .screen-fx-glass {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(
+          118deg,
+          rgba(255, 248, 230, 0.2) 0%,
+          rgba(255, 255, 255, 0.07) 18%,
+          transparent 36%
+        ),
+        radial-gradient(
+          ellipse 80% 50% at 18% 14%,
+          rgba(255, 244, 214, 0.22),
+          transparent 58%
+        ),
+        linear-gradient(
+          to bottom,
+          rgba(255, 255, 255, 0.06),
+          transparent 18%,
+          transparent 82%,
+          rgba(0, 0, 0, 0.18)
+        );
+    }
+
+    /* CRT flicker */
+    @keyframes crt-flicker {
+      0%, 100% { opacity: 1; }
+      42% { opacity: 0.985; }
+      44% { opacity: 0.96; }
+      46% { opacity: 0.995; }
+    }
+    .tv-screen { animation: crt-flicker 4s infinite; }
+
+    /* ============================================================
+       9. PER-ERA SCREEN STYLES
+       ============================================================ */
+
+    /* 60s — Golden sepia */
+    .era-60s .screen-bg {
+      background: linear-gradient(170deg, #b89968 0%, #8b7355 40%, #a08868 80%, #6b5840 100%);
+    }
+    .era-60s .era-badge {
+      color: #2d1b0e;
+      text-shadow: 0 1px 3px rgba(255,255,255,0.25);
+    }
+    .era-60s .era-tagline { color: #3d2b15; }
+    .era-60s ~ .tv-glow { background: #b89968; }
+
+    /* 70s — Warm disco */
+    .era-70s .screen-bg {
+      background: linear-gradient(170deg, #e8890f 0%, #cd6f20 40%, #8b4513 100%);
+    }
+    .era-70s .era-badge {
+      color: #fff8e0;
+      text-shadow: 0 2px 8px rgba(139,69,19,0.6), 0 0 30px rgba(255,180,0,0.25);
+    }
+    .era-70s .era-tagline { color: rgba(255,248,224,0.85); }
+    .era-70s ~ .tv-glow { background: #e87010; }
+
+    /* 80s — Neon synthwave */
+    .era-80s .screen-bg {
+      background: linear-gradient(170deg, #0a001a 0%, #1a0040 30%, #2d0060 55%, #e0005e 100%);
+    }
+    .era-80s .era-badge {
+      color: #ff2d78;
+      text-shadow:
+        0 0 7px #ff2d78,
+        0 0 15px #ff2d78,
+        0 0 30px #ff2d78,
+        0 0 60px rgba(255,45,120,0.5);
+    }
+    .era-80s .era-tagline { color: #80d0ff; }
+    .era-80s ~ .tv-glow { background: #ff2d78; }
+
+    /* 90s — Grunge VHS */
+    .era-90s .screen-bg {
+      background: linear-gradient(170deg, #1e2530 0%, #2d3748 40%, #3a4a60 70%, #1e2530 100%);
+    }
+    .era-90s .era-badge {
+      color: #e8e8e8;
+      text-shadow: 3px 3px 0 #c0392b, -2px -2px 0 #2980b9;
+    }
+    .era-90s .era-tagline { color: rgba(220,220,220,0.8); }
+    .era-90s ~ .tv-glow { background: #4a5568; }
+
+    /* 2000s — Glossy digital */
+    .era-2000s .screen-bg {
+      background: linear-gradient(170deg, #065f56 0%, #0d9488 35%, #14b8a6 60%, #0a7c70 100%);
+    }
+    .era-2000s .era-badge {
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      background: linear-gradient(180deg, #fff 20%, #b0e0d8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .era-2000s .era-tagline { color: rgba(255,255,255,0.85); }
+    .era-2000s ~ .tv-glow { background: #0d9488; }
+
+    /* 2010s — Minimal LED */
+    .era-2010s .screen-bg {
+      background: linear-gradient(170deg, #0c1220 0%, #111d35 40%, #0c1220 100%);
+    }
+    .era-2010s .era-badge {
+      color: #818cf8;
+      text-shadow: 0 0 12px rgba(129,140,248,0.5), 0 0 30px rgba(129,140,248,0.2);
+    }
+    .era-2010s .era-tagline { color: rgba(160,170,255,0.7); }
+    .era-2010s ~ .tv-glow { background: #4f5bc4; }
+
+    /* Now — Crisp modern */
+    .era-now .screen-bg {
+      background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf0 50%, #f0f2f5 100%);
+    }
+    .era-now .era-badge {
+      color: #0f172a;
+      text-shadow: none;
+    }
+    .era-now .era-tagline { color: #475569; }
+    .era-now ~ .tv-glow { background: #e0e5ea; }
+
+    /* ============================================================
+       10. ERA MENU — glass bar above the player
+       ============================================================ */
+    .bottom-chrome {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 0 14px 16px;
+    }
+
+    .era-menu {
+      width: 100%;
+      max-width: 680px;
+      padding: 8px 12px 10px;
+      border-radius: 22px;
+      background: rgba(22, 16, 12, 0.38);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      box-shadow:
+        0 10px 36px rgba(0, 0, 0, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(28px) saturate(140%);
+      -webkit-backdrop-filter: blur(28px) saturate(140%);
+    }
+
+    .era-menu-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 16px;
+      margin-bottom: 8px;
+      padding: 0 4px;
+    }
+
+    .era-menu-kicker {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+    }
+
+    .era-menu-cooldown {
+      margin-left: auto;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      color: rgba(255, 255, 255, 0.72);
+    }
+
+    .era-menu-btns {
+      display: flex;
+      gap: 6px;
+    }
+
+    .era-chip {
+      flex: 1;
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      padding: 8px 4px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.88);
+      background: rgba(255, 255, 255, 0.12);
+      cursor: pointer;
+      transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+    }
+
+    .era-chip:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.22);
+    }
+
+    .era-chip:active:not(:disabled) {
+      transform: scale(0.97);
+    }
+
+    .era-chip.is-active {
+      background: #1ed760;
+      color: #04120a;
+    }
+
+    .era-chip.is-active:hover:not(:disabled) {
+      background: #1ed760;
+      color: #04120a;
+    }
+
+    .era-chip:disabled {
+      opacity: 0.42;
+      cursor: not-allowed;
+    }
+
+    .era-chip.is-active:disabled {
+      opacity: 1;
+      cursor: default;
+    }
+
+    /* ============================================================
+       11. PLAYER DOCK
+       ============================================================ */
+    .player-dock {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+    }
+
+    .player-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      max-width: 680px;
+      padding: 8px 14px;
+      background: rgba(22, 16, 12, 0.38);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 22px;
+      color: #fff;
+      box-shadow:
+        0 10px 36px rgba(0, 0, 0, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(28px) saturate(140%);
+      -webkit-backdrop-filter: blur(28px) saturate(140%);
+    }
+
+    /* Album art */
+    .art {
+      width: 50px;
+      height: 50px;
+      flex-shrink: 0;
+      overflow: hidden;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .art img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    /* Track info */
+    .meta { min-width: 0; flex: 1; }
+
+    .title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .artist {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.68);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Progress */
+    .progress-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .time {
+      width: 36px;
+      flex-shrink: 0;
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+      color: rgba(255, 255, 255, 0.58);
+    }
+    .time.end { text-align: right; }
+
+    .seek {
+      position: relative;
+      height: 3px;
+      flex: 1;
+      overflow: hidden;
+      border: 0;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.22);
+      cursor: pointer;
+      padding: 0;
+    }
+    .seek:disabled { cursor: default; }
+
+    .seek-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0%;
+      border-radius: 999px;
+      background: #fff;
+    }
+
+    /* Transport */
+    .transport {
+      display: flex;
+      flex-shrink: 0;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .icon-btn {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: #fff;
+      border-radius: 999px;
+      padding: 5px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .icon-btn:hover { background: rgba(255, 255, 255, 0.12); }
+    .icon-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .play-btn {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      border-radius: 999px;
+      background: #fff;
+      color: #1c1610;
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      transition: transform 0.1s, box-shadow 0.15s;
+    }
+    .play-btn:hover:not(:disabled) {
+      background: #1ed760;
+      color: #04120a;
+      transform: scale(1.05);
+      box-shadow: 0 3px 14px rgba(30, 215, 96, 0.35);
+    }
+    .play-btn:active {
+      transform: scale(0.96);
+    }
+    .play-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .play-btn .play-icon { transform: translateX(1px); }
+
+    /* ============================================================
+       12. RESPONSIVE — TABLET & MOBILE
+       ============================================================ */
+    @media (max-width: 900px) {
+      .bottom-chrome {
+        padding-bottom: 10px;
+        gap: 8px;
+      }
+
+      .era-chip {
+        font-size: 12px;
+        padding: 7px 2px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .player-bar {
+        gap: 8px;
+        padding: 7px 10px;
+      }
+      .art { width: 42px; height: 42px; border-radius: 6px; }
+      .title { font-size: 13px; }
+      .play-btn { width: 36px; height: 36px; }
+      .brand-tag { display: none; }
+      .online-pill {
+        top: 22px;
+        left: 22px;
+        padding: 6px 10px;
+        font-size: 11px;
+      }
+      .spotify-pill {
+        top: 22px;
+        right: 22px;
+        padding: 6px 10px 6px 8px;
+        gap: 6px;
+      }
+      .spotify-pill-text { font-size: 11px; }
+      .share-card {
+        width: min(240px, calc(100vw - 24px));
+      }
+      .share-card.is-open { width: min(260px, calc(100vw - 24px)); }
+    }
+
+    body.is-phone .brand-tag { display: none; }
+    body.is-phone .online-pill {
+      top: 10px;
+      left: 10px;
+      padding: 6px 9px;
+      font-size: 11px;
+    }
+    body.is-phone .spotify-pill {
+      top: 10px;
+      right: 10px;
+      max-width: calc(100vw - 132px);
+      padding: 6px 9px 6px 8px;
+      gap: 6px;
+    }
+    body.is-phone .spotify-pill-text {
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    body.is-phone .bottom-chrome {
+      padding: 0 8px 10px;
+      gap: 6px;
+    }
+    body.is-phone .era-menu {
+      padding: 6px 8px 8px;
+      border-radius: 18px;
+    }
+    body.is-phone .era-menu-kicker { font-size: 10px; }
+    body.is-phone .era-chip {
+      font-size: 11px;
+      padding: 6px 1px;
+    }
+    body.is-phone .player-bar {
+      padding: 7px 10px;
+      border-radius: 18px;
+    }
+
+    /* ============================================================
+       13. PAGE LOAD ANIMATION
+       ============================================================ */
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .bottom-chrome {
+      animation: fade-in 0.8s ease-out both;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Hidden YouTube players — one seed player per era -->
+  <div class="yt-offscreen" id="ytDock" aria-hidden="true"></div>
+
+  <!-- ============ SCENE ============ -->
+  <div class="scene" id="scene">
+
+    <div class="brand-tag">EraTV</div>
+    <div class="online-pill" id="onlinePill" aria-live="polite">
+      <span class="online-dot" aria-hidden="true"></span>
+      <span id="onlineCount">1 listening</span>
+    </div>
+    <a
+      class="spotify-pill"
+      id="spotifyPill"
+      href="https://open.spotify.com/playlist/37i9dQZF1DX0XUfTFmNBRM?si=ba9b99a785c04a1c"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <svg class="spotify-pill-logo" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+      </svg>
+      <span class="spotify-pill-text" id="spotifyPillText">2026 playlist on Spotify</span>
+      <svg class="spotify-pill-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M7 17L17 7M9 7h8v8"/>
+      </svg>
+    </a>
+
+    <div class="file-warning" id="fileWarning">
+      Open this page via <code>http://</code> (e.g. <code>python -m http.server 8080</code>) so YouTube can play.
+    </div>
+
+    <div class="scene-content">
+
+      <!-- Screen content — sits BEHIND the TV PNG (z-index 1) -->
+      <div class="tv-glow" id="tvGlow"></div>
+      <div class="tv-screen" id="tvScreen">
+        <div class="screen-bg" id="screenBg"></div>
+        <video
+          id="eraVideo"
+          class="screen-video"
+          playsinline
+          loop
+          muted
+          preload="none"
+        ></video>
+        <div class="screen-content" id="screenContent">
+          <div class="era-badge" id="eraBadge"></div>
+          <div class="era-tagline" id="eraTagline">Press a decade below to travel back</div>
+        </div>
+        <canvas class="screen-noise" id="screenNoise" width="128" height="96"></canvas>
+        <div class="screen-fx" aria-hidden="true">
+          <div class="screen-fx-scan"></div>
+          <div class="screen-fx-rgb"></div>
+          <div class="screen-fx-grain"></div>
+          <div class="screen-fx-vignette"></div>
+          <div class="screen-fx-glass"></div>
+        </div>
+      </div>
+
+      <!-- TV image — covers full viewport, ON TOP (z-index 2) -->
+      <img
+        src="bg_main.png"
+        alt="Living room with vintage CRT television"
+        class="tv-img"
+        id="tvImg"
+        draggable="false"
+      />
+
+    </div>
+
+    <div class="bottom-chrome" id="bottomChrome">
+      <nav class="era-menu" id="remoteArea" aria-label="Travel to an era">
+        <div class="era-menu-top">
+          <span class="era-menu-kicker">Travel to…</span>
+        </div>
+        <div class="era-menu-btns" id="remoteBtns"></div>
+      </nav>
+
+      <div class="player-dock">
+      <div class="player-bar">
+        <div class="art" id="art"><div></div></div>
+        <div class="meta">
+          <div class="title" id="trackTitle">Loading…</div>
+          <div class="artist" id="trackArtist">Bollywood</div>
+          <div class="progress-row">
+            <span class="time" id="timeCurrent">0:00</span>
+            <button type="button" class="seek" id="seekBtn" aria-label="Seek" disabled>
+              <span class="seek-fill" id="seekFill"></span>
+            </button>
+            <span class="time end" id="timeDuration">0:00</span>
+          </div>
+        </div>
+        <div class="transport">
+          <button type="button" class="icon-btn" id="prevBtn" aria-label="Previous" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M6 6h2v12H6zm3.5 6L18 6v12z" />
+            </svg>
+          </button>
+          <button type="button" class="play-btn" id="playBtn" aria-label="Play" disabled>
+            <svg class="play-icon" id="playIcon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </button>
+          <button type="button" class="icon-btn" id="nextBtn" aria-label="Next" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      </div>
+    </div>
+
+  </div>
+
+  <aside class="share-card" id="shareCard">
+    <p class="share-card-title">wanna play your spotify playlist on ERA TV?</p>
+    <form class="share-card-form" id="shareForm">
+      <div class="share-card-fields" id="shareFields">
+        <input
+          class="share-card-input"
+          id="shareName"
+          type="text"
+          name="name"
+          placeholder="Your name"
+          maxlength="80"
+          autocomplete="name"
+        />
+        <input
+          class="share-card-input"
+          id="shareInput"
+          type="url"
+          name="playlist"
+          placeholder="Paste Spotify playlist link"
+          autocomplete="off"
+        />
+      </div>
+      <button class="share-card-submit" id="shareSubmit" type="submit">Submit</button>
+    </form>
+    <p class="share-card-status" id="shareStatus"></p>
+  </aside>
+
+  <!-- ============ SCRIPT ============ -->
+  <script>
+    /* ==========================================================
+       CONSTANTS
+       ========================================================== */
+    const ERAS = [
+      { id: "60s",   label: "60s",   tagline: "Golden Classics",  screenClass: "era-60s"   },
+      { id: "70s",   label: "70s",   tagline: "Retro Grooves",    screenClass: "era-70s"   },
+      { id: "80s",   label: "80s",   tagline: "Disco & Pop",      screenClass: "era-80s"   },
+      { id: "90s",   label: "90s",   tagline: "Dil Se",           screenClass: "era-90s"   },
+      { id: "2000s", label: "2000s", tagline: "Millennium Hits",  screenClass: "era-2000s" },
+      { id: "2010s", label: "2010s", tagline: "New Wave",         screenClass: "era-2010s" },
+      { id: "now",   label: "Now",   tagline: "Press a decade below to travel back", screenClass: "era-now" }
+    ];
+
+    /* One seed song per era, then a shuffled same-era Bollywood pool.
+       After the curated pool, YouTube Mix (RD + seed) continues the station. */
+    const eraPlaylists = {
+      "60s": {
+        seed: "br6C4U3Dyfo",
+        ids: [
+          "br6C4U3Dyfo",   // Lag Ja Gale — Woh Kaun Thi (1964)
+          "Nw7lcCNSYy8"    // Mere Sapno Ki Rani — Aradhana (1969)
+        ]
+      },
+      "70s": {
+        seed: "XuCp0r3vhPQ",
+        ids: [
+          "XuCp0r3vhPQ",   // Chura Liya Hai Tumne — Yaadon Ki Baaraat (1973)
+          "qfCt1UZAXMQ"    // Yeh Dosti — Sholay (1975)
+        ]
+      },
+      "80s": {
+        seed: "FEvBiayarlc",
+        ids: [
+          "FEvBiayarlc",   // Papa Kehte Hain — QSQT (1988)
+          "vdgwvgYdQT8"    // Hawa Hawai — Mr. India (1987)
+        ]
+      },
+      "90s": {
+        seed: "cNV5hLSa9H8",
+        ids: [
+          "cNV5hLSa9H8",   // Tujhe Dekha Toh — DDLJ (1995)
+          "Ki41AKu0iHc"    // Pehla Nasha — Jo Jeeta Wohi Sikandar (1992)
+        ]
+      },
+      "2000s": {
+        seed: "g0eO74UmRBs",
+        ids: [
+          "g0eO74UmRBs",   // Kal Ho Naa Ho (2003)
+          "4dsFQFCvVGU",   // Kajra Re — Bunty Aur Babli (2005)
+          "2uUmHTgT65I"    // Dhoom Machale — Dhoom (2004)
+        ]
+      },
+      "2010s": {
+        seed: "WWZxDA81JFk",
+        ids: [
+          "WWZxDA81JFk",   // Tum Hi Ho — Aashiqui 2 (2013)
+          "284Ov7ysmfA"    // Channa Mereya — ADHM (2016)
+        ]
+      },
+      "now": {
+        seed: "VAdGW7QDJiU",
+        ids: [
+          "VAdGW7QDJiU",   // Chaleya — Jawan (2023)
+          "BddP6PYo2gs",   // Kesariya — Brahmastra (2022)
+          "YxWlaYCA8MU",   // Jhoome Jo Pathaan (2023)
+          "u2NAuswnTKs"    // Apna Bana Le — Bhediya (2022)
+        ]
+      }
+    };
+
+    const eraSpotify = {
+      "60s":   "https://open.spotify.com/playlist/3dKv6gpADy34FI6rcP7DAT?si=9f1daf0003504d41",
+      "70s":   "https://open.spotify.com/playlist/1arIwnl806bdxvrgTEuvLw?si=6a1d97934d5f4250",
+      "80s":   "https://open.spotify.com/playlist/37i9dQZF1DX3NU3NvyoJUz?si=cfef43c4dd404085",
+      "90s":   "https://open.spotify.com/playlist/0Gd0yQzB6wttuaLlawHlYI?si=1eca1af50e4b47e9",
+      "2000s": "https://open.spotify.com/playlist/37i9dQZF1DWVq1SXCH6uFn?si=858623d690a547ee",
+      "2010s": "https://open.spotify.com/playlist/37i9dQZF1EIfK3a4EDrv2L?si=8136925737c444ae",
+      "now":   "https://open.spotify.com/playlist/37i9dQZF1DX0XUfTFmNBRM?si=ba9b99a785c04a1c"
+    };
+
+    const eraVideos = {
+      "60s": "videos/60s.mp4",
+      "70s": "videos/70s.mp4",
+      "80s": "videos/80s.mp4",
+      "90s": "videos/90s.mp4",
+      "2000s": "videos/2000s.mp4",
+      "2010s": "videos/2010s.mp4"
+    };
+
+    const DEFAULT_ERA = "now";
+    const PLAY_ICON  = '<path d="M8 5v14l11-7z"/>';
+    const PAUSE_ICON = '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>';
+    const ERA_IDS = ERAS.map(function (era) { return era.id; });
+    const AUDIO_LOAD_ORDER = ["now", "2010s", "2000s", "90s", "80s", "70s", "60s"];
+
+    /* ==========================================================
+       STATE
+       ========================================================== */
+    const players = {};
+    const playerReadyMap = {};
+    const seedArmed = {};
+    const mixMode = {};
+    const preloadParkTimers = {};
+    let player      = null;
+    let playerReady = false;
+    let playing     = false;
+    let currentEra  = DEFAULT_ERA;
+    let loadedEra   = null;
+    let pendingEra  = null;
+    let duration    = 0;
+    let errorStreak = 0;
+    let switchingEra = false;
+    let inMixMode   = false;
+    let screenGen   = 0;
+    let mediaGen    = 0;
+    let noiseRaf    = 0;
+    let videoReadyHandler = null;
+    let ignoreEnded = false;
+    let videoStartTimer = null;
+    let playKickTimer = null;
+    let audioUnlocked = false;
+    let nowHasPlayed = false;
+    let preloadTimer = null;
+
+    /* ==========================================================
+       DOM REFERENCES
+       ========================================================== */
+    const ytDock        = document.getElementById("ytDock");
+    const tvImg         = document.getElementById("tvImg");
+    const tvScreen      = document.getElementById("tvScreen");
+    const eraVideo      = document.getElementById("eraVideo");
+    const screenBg      = document.getElementById("screenBg");
+    const screenContent = document.getElementById("screenContent");
+    const screenNoise   = document.getElementById("screenNoise");
+    const tvGlow        = document.getElementById("tvGlow");
+    const eraBadge      = document.getElementById("eraBadge");
+    const eraTagline    = document.getElementById("eraTagline");
+    const remoteBtns    = document.getElementById("remoteBtns");
+    const spotifyPill   = document.getElementById("spotifyPill");
+    const spotifyPillText = document.getElementById("spotifyPillText");
+    const shareCard     = document.getElementById("shareCard");
+    const bottomChrome  = document.getElementById("bottomChrome");
+    const shareForm     = document.getElementById("shareForm");
+    const shareInput    = document.getElementById("shareInput");
+    const shareName     = document.getElementById("shareName");
+    const shareSubmit   = document.getElementById("shareSubmit");
+    const shareStatus   = document.getElementById("shareStatus");
+    const onlineCount   = document.getElementById("onlineCount");
+    const playBtn       = document.getElementById("playBtn");
+    const playIcon      = document.getElementById("playIcon");
+    const prevBtn       = document.getElementById("prevBtn");
+    const nextBtn       = document.getElementById("nextBtn");
+    const seekBtn       = document.getElementById("seekBtn");
+    const seekFill      = document.getElementById("seekFill");
+    const timeCurrent   = document.getElementById("timeCurrent");
+    const timeDuration  = document.getElementById("timeDuration");
+    const trackTitle    = document.getElementById("trackTitle");
+    const trackArtist   = document.getElementById("trackArtist");
+    const art           = document.getElementById("art");
+    const noiseCtx      = screenNoise.getContext("2d");
+
+    if (location.protocol === "file:") {
+      document.getElementById("fileWarning").style.display = "block";
+    }
+
+    /* ==========================================================
+       SCREEN POSITIONING — desktop vs phone background
+       ========================================================== */
+    const DESKTOP_BG = "bg_main.png";
+    const PHONE_BG = "bg_phone-no-bg.png";
+    const DESKTOP_FRAC = { top: 0.3046875, left: 0.37209302325581395, width: 0.25181686046511625, height: 0.3828125 };
+    const PHONE_FRAC_FALLBACK = { top: 0.39, left: 0.13, width: 0.74, height: 0.26 };
+    let phoneFrac = null;
+    let phoneMaskUrl = null;
+    let measuringHole = false;
+
+    function isPhoneLayout() {
+      return window.matchMedia("(max-width: 768px)").matches;
+    }
+
+    function currentScreenFrac() {
+      if (!isPhoneLayout()) return DESKTOP_FRAC;
+      return phoneFrac || PHONE_FRAC_FALLBACK;
+    }
+
+    function applyScreenMask() {
+      if (isPhoneLayout() && phoneMaskUrl) {
+        tvScreen.style.webkitMaskImage = 'url("' + phoneMaskUrl + '")';
+        tvScreen.style.maskImage = 'url("' + phoneMaskUrl + '")';
+      } else {
+        tvScreen.style.webkitMaskImage = "";
+        tvScreen.style.maskImage = "";
+      }
+    }
+
+    function measureTransparentHole(img) {
+      const maxW = 480;
+      const scale = Math.min(1, maxW / img.naturalWidth);
+      const w = Math.max(1, Math.round(img.naturalWidth * scale));
+      const h = Math.max(1, Math.round(img.naturalHeight * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h).data;
+
+      function scan(test) {
+        let minX = w, minY = h, maxX = 0, maxY = 0, found = false;
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const i = (y * w + x) * 4;
+            if (!test(data[i], data[i + 1], data[i + 2], data[i + 3], x, y)) continue;
+            found = true;
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+          }
+        }
+        return found ? { minX, minY, maxX, maxY } : null;
+      }
+
+      let box = scan(function (_r, _g, _b, a) { return a < 28; });
+      if (!box) {
+        box = scan(function (r, g, b, a, x, y) {
+          return a > 180 && r + g + b < 20 && y > h * 0.22 && y < h * 0.78 && x > w * 0.06 && x < w * 0.94;
+        });
+      }
+      if (!box) return { frac: PHONE_FRAC_FALLBACK, maskUrl: null };
+
+      const pad = 1;
+      const minX = Math.max(0, box.minX - pad);
+      const minY = Math.max(0, box.minY - pad);
+      const maxX = Math.min(w - 1, box.maxX + pad);
+      const maxY = Math.min(h - 1, box.maxY + pad);
+      const frac = {
+        top: minY / h,
+        left: minX / w,
+        width: (maxX - minX + 1) / w,
+        height: (maxY - minY + 1) / h
+      };
+
+      const mw = maxX - minX + 1;
+      const mh = maxY - minY + 1;
+      const mask = document.createElement("canvas");
+      mask.width = mw;
+      mask.height = mh;
+      const mctx = mask.getContext("2d");
+      const mid = mctx.createImageData(mw, mh);
+      for (let y = 0; y < mh; y++) {
+        for (let x = 0; x < mw; x++) {
+          const i = ((minY + y) * w + (minX + x)) * 4;
+          const a = data[i + 3];
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          const hole = a < 28 || (r + g + b < 20 && a > 180);
+          const o = (y * mw + x) * 4;
+          const v = hole ? 255 : 0;
+          mid.data[o] = mid.data[o + 1] = mid.data[o + 2] = mid.data[o + 3] = v;
+        }
+      }
+      mctx.putImageData(mid, 0, 0);
+      return { frac: frac, maskUrl: mask.toDataURL("image/png") };
+    }
+
+    function positionScreen() {
+      if (!tvImg.naturalWidth) return;
+
+      const cW = tvImg.clientWidth;
+      const cH = tvImg.clientHeight;
+      const iW = tvImg.naturalWidth;
+      const iH = tvImg.naturalHeight;
+      const cRatio = cW / cH;
+      const iRatio = iW / iH;
+
+      let rW, rH, oX, oY;
+      if (cRatio > iRatio) {
+        rW = cW;
+        rH = cW / iRatio;
+        oX = 0;
+        oY = (cH - rH) / 2;
+      } else {
+        rH = cH;
+        rW = cH * iRatio;
+        oX = (cW - rW) / 2;
+        oY = 0;
+      }
+
+      const frac = currentScreenFrac();
+      const sLeft   = oX + rW * frac.left;
+      const sTop    = oY + rH * frac.top;
+      const sWidth  = rW * frac.width;
+      const sHeight = rH * frac.height;
+
+      tvScreen.style.left   = sLeft   + "px";
+      tvScreen.style.top    = sTop    + "px";
+      tvScreen.style.width  = sWidth  + "px";
+      tvScreen.style.height = sHeight + "px";
+
+      tvGlow.style.left   = (sLeft - 10)   + "px";
+      tvGlow.style.top    = (sTop - 10)    + "px";
+      tvGlow.style.width  = (sWidth + 20)  + "px";
+      tvGlow.style.height = (sHeight + 20) + "px";
+    }
+
+    function syncBackground() {
+      const phone = isPhoneLayout();
+      document.body.classList.toggle("is-phone", phone);
+      const next = phone ? PHONE_BG : DESKTOP_BG;
+      const current = tvImg.getAttribute("src") || "";
+      if (current !== next) {
+        tvImg.src = next;
+        return;
+      }
+      if (phone && tvImg.naturalWidth && !phoneFrac && !measuringHole) {
+        measuringHole = true;
+        const metrics = measureTransparentHole(tvImg);
+        phoneFrac = metrics.frac;
+        phoneMaskUrl = metrics.maskUrl;
+        measuringHole = false;
+      }
+      applyScreenMask();
+      positionScreen();
+    }
+
+    function positionShareCard() {
+      if (window.innerWidth > 1100) {
+        shareCard.style.bottom = "";
+        shareCard.style.right = "";
+        return;
+      }
+      const chromeTop = bottomChrome.getBoundingClientRect().top;
+      const lift = Math.max(12, window.innerHeight - chromeTop + 10);
+      shareCard.style.bottom = lift + "px";
+      shareCard.style.right = (window.innerWidth <= 480 ? 10 : 14) + "px";
+    }
+
+    tvImg.addEventListener("load", syncBackground);
+    window.addEventListener("resize", function () {
+      syncBackground();
+      positionShareCard();
+    });
+    syncBackground();
+    positionShareCard();
+
+    /* ==========================================================
+       UTILITIES
+       ========================================================== */
+    function seedId(era) {
+      const entry = eraPlaylists[era] || {};
+      return entry.seed || (entry.ids && entry.ids[0]) || entry.id;
+    }
+
+    function mixId(era) {
+      const seed = seedId(era);
+      return seed ? "RD" + seed : "";
+    }
+
+    function shuffle(list) {
+      const a = list.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = a[i];
+        a[i] = a[j];
+        a[j] = tmp;
+      }
+      return a;
+    }
+
+    function eraQueue(era) {
+      const entry = eraPlaylists[era] || {};
+      const seed = seedId(era);
+      const rest = (entry.ids || []).filter(function (id) { return id && id !== seed; });
+      return seed ? [seed].concat(shuffle(rest)) : shuffle(rest);
+    }
+
+    function eraObj(id) {
+      return ERAS.find(e => e.id === id) || ERAS[0];
+    }
+
+    function clamp(n, min, max) {
+      return Math.min(max, Math.max(min, n));
+    }
+
+    function formatTime(seconds) {
+      if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return m + ":" + String(s).padStart(2, "0");
+    }
+
+    /* ==========================================================
+       REMOTE CONTROL — BUILD & HANDLERS
+       ========================================================== */
+    function buildRemote() {
+      ERAS.forEach(era => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "era-chip";
+        btn.dataset.era = era.id;
+        btn.textContent = era.label;
+        btn.setAttribute("aria-label", "Travel to " + era.label);
+        btn.addEventListener("click", () => changeEra(era.id));
+        remoteBtns.appendChild(btn);
+      });
+      updateRemoteActive(currentEra);
+    }
+
+    function updateRemoteActive(eraId) {
+      remoteBtns.querySelectorAll(".era-chip").forEach(btn => {
+        btn.classList.toggle("is-active", btn.dataset.era === eraId);
+      });
+      updateSpotifyPill(eraId);
+    }
+
+    function updateSpotifyPill(eraId) {
+      const era = eraObj(eraId);
+      const href = eraSpotify[eraId];
+      if (!href) return;
+      const name = eraId === "now" ? "2026" : era.label;
+      spotifyPill.href = href;
+      spotifyPillText.textContent = name + " playlist on Spotify";
+      spotifyPill.setAttribute("aria-label", "Open " + name + " playlist on Spotify");
+    }
+
+    function eraVideoIds(era) {
+      const entry = eraPlaylists[era] || {};
+      const ids = (entry.ids || []).slice();
+      const seed = seedId(era);
+      if (seed && ids.indexOf(seed) === -1) ids.unshift(seed);
+      return ids;
+    }
+
+    /* ==========================================================
+       TV SCREEN — NOISE & ERA STYLING
+       ========================================================== */
+    function drawNoise() {
+      const w = screenNoise.width;
+      const h = screenNoise.height;
+      const imageData = noiseCtx.createImageData(w, h);
+      const d = imageData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const v = Math.random() > 0.5 ? 255 : 0;
+        d[i] = d[i + 1] = d[i + 2] = v;
+        d[i + 3] = 140;
+      }
+      noiseCtx.putImageData(imageData, 0, 0);
+    }
+
+    function applyEraScreen(eraId) {
+      const era = eraObj(eraId);
+      ERAS.forEach(e => tvScreen.classList.remove(e.screenClass));
+      tvScreen.classList.add(era.screenClass);
+      eraBadge.textContent = era.label;
+      eraTagline.textContent = era.tagline;
+    }
+
+    function stopEraVideo() {
+      if (videoReadyHandler) {
+        eraVideo.removeEventListener("canplay", videoReadyHandler);
+        eraVideo.removeEventListener("error", videoReadyHandler);
+        videoReadyHandler = null;
+      }
+      eraVideo.pause();
+      eraVideo.removeAttribute("src");
+      eraVideo.removeAttribute("preload");
+      eraVideo.load();
+      eraVideo.classList.remove("is-on");
+      tvScreen.classList.remove("has-video");
+    }
+
+    function abortEraVideo() {
+      if (videoStartTimer) {
+        clearTimeout(videoStartTimer);
+        videoStartTimer = null;
+      }
+      stopEraVideo();
+    }
+
+    function scheduleEraVideo(eraId) {
+      const src = eraVideos[eraId];
+      const gen = screenGen;
+      if (!src) {
+        stopNoise(gen);
+        return;
+      }
+      if (eraVideo.getAttribute("src") === src && eraVideo.classList.contains("is-on")) return;
+      if (videoStartTimer) clearTimeout(videoStartTimer);
+      videoStartTimer = setTimeout(function () {
+        videoStartTimer = null;
+        if (eraId !== currentEra || gen !== screenGen) return;
+        setEraVideo(eraId, gen);
+      }, 1400);
+    }
+
+    function startNoise(gen) {
+      switchingEra = true;
+      screenNoise.classList.add("active");
+      screenContent.classList.add("transitioning");
+      cancelAnimationFrame(noiseRaf);
+      function loop() {
+        if (gen !== screenGen) return;
+        drawNoise();
+        noiseRaf = requestAnimationFrame(loop);
+      }
+      noiseRaf = requestAnimationFrame(loop);
+    }
+
+    function stopNoise(gen) {
+      if (gen !== screenGen) return;
+      cancelAnimationFrame(noiseRaf);
+      screenNoise.classList.remove("active");
+      screenContent.classList.remove("transitioning");
+      switchingEra = false;
+    }
+
+    function setEraVideo(eraId, gen) {
+      const src = eraVideos[eraId];
+      const started = Date.now();
+
+      stopEraVideo();
+
+      function reveal() {
+        if (gen !== screenGen) return;
+        const wait = Math.max(0, 280 - (Date.now() - started));
+        setTimeout(function () {
+          if (gen !== screenGen) return;
+          if (src) {
+            eraVideo.classList.add("is-on");
+            tvScreen.classList.add("has-video");
+            eraVideo.play().catch(function () { /* user gesture already happened */ });
+          }
+          stopNoise(gen);
+        }, wait);
+      }
+
+      if (!src) {
+        reveal();
+        return;
+      }
+
+      videoReadyHandler = reveal;
+      eraVideo.addEventListener("canplay", reveal, { once: true });
+      eraVideo.addEventListener("error", reveal, { once: true });
+      eraVideo.preload = "metadata";
+      eraVideo.muted = true;
+      eraVideo.src = src;
+      eraVideo.load();
+      setTimeout(function () {
+        if (gen === screenGen && screenNoise.classList.contains("active")) reveal();
+      }, 8000);
+    }
+
+    function playStaticTransition(eraId, callback) {
+      const gen = ++screenGen;
+      abortEraVideo();
+      tvScreen.classList.remove("is-now");
+      startNoise(gen);
+
+      setTimeout(function () {
+        if (gen !== screenGen) return;
+        applyEraScreen(eraId);
+        if (callback) callback();
+      }, 180);
+      return gen;
+    }
+
+    function holdNowScreen() {
+      const gen = ++screenGen;
+      abortEraVideo();
+      tvScreen.classList.add("is-now");
+      applyEraScreen("now");
+      screenContent.classList.remove("transitioning");
+      startNoise(gen);
+      return gen;
+    }
+
+    /* ==========================================================
+       ERA CHANGE — MAIN ENTRY POINT
+       ========================================================== */
+    function changeEra(eraId) {
+      if (!eraPlaylists[eraId]) return;
+      unlockAudio();
+      if (eraId === currentEra) {
+        if (!playing && players[eraId]) activateEraAudio(eraId);
+        return;
+      }
+      const visualChange = eraId !== currentEra;
+
+      currentEra = eraId;
+      loadedEra = null;
+      inMixMode = !!mixMode[eraId];
+      ignoreEnded = true;
+      errorStreak = 0;
+      updateRemoteActive(eraId);
+      trackTitle.textContent = eraObj(eraId).label + " radio";
+      trackArtist.textContent = seedArmed[eraId] ? "Live" : "Tuning in…";
+      setArtwork(seedId(eraId));
+
+      if (eraId === "now") holdNowScreen();
+      else if (visualChange) playStaticTransition(eraId);
+
+      activateEraAudio(eraId);
+      trackListening();
+    }
+
+    /* ==========================================================
+       YOUTUBE — ONE HIDDEN PLAYER PER ERA SEED
+       ========================================================== */
+    function lockReferrer() {
+      ytDock.querySelectorAll("iframe").forEach(function (iframe) {
+        iframe.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+      });
+    }
+
+    function playerVars() {
+      const vars = {
+        controls: 0,
+        disablekb: 1,
+        fs: 0,
+        modestbranding: 1,
+        rel: 0,
+        playsinline: 1,
+        autoplay: 0,
+        vq: "small"
+      };
+      if (location.protocol.startsWith("http")) vars.origin = location.origin;
+      return vars;
+    }
+
+    function preferSmall(p) {
+      if (!p) return;
+      try { if (p.setPlaybackQuality) p.setPlaybackQuality("small"); } catch (err) { /* ignore */ }
+      try { if (p.setPlaybackQualityRange) p.setPlaybackQualityRange("small", "small"); } catch (err) { /* ignore */ }
+    }
+
+    function nextPreloadEra() {
+      for (let i = 0; i < AUDIO_LOAD_ORDER.length; i++) {
+        const era = AUDIO_LOAD_ORDER[i];
+        if (era === currentEra) continue;
+        if (!players[era] || !seedArmed[era]) return era;
+      }
+      return null;
+    }
+
+    function continuePreload() {
+      if (preloadTimer) {
+        clearTimeout(preloadTimer);
+        preloadTimer = null;
+      }
+      if (currentEra === "now" && !nowHasPlayed) return;
+      const era = nextPreloadEra();
+      if (!era) return;
+      if (!players[era]) {
+        console.log("[EraTV] preload create", era);
+        createEraPlayer(era);
+        return;
+      }
+      if (!seedArmed[era] && !mixMode[era]) armBackgroundSeed(era);
+    }
+
+    function schedulePreload(delay) {
+      if (preloadTimer) clearTimeout(preloadTimer);
+      preloadTimer = setTimeout(function () {
+        preloadTimer = null;
+        continuePreload();
+      }, delay);
+    }
+
+    function pauseOtherPlayers(exceptEra) {
+      ERA_IDS.forEach(function (era) {
+        if (era === exceptEra || !players[era]) return;
+        if (preloadParkTimers[era]) {
+          clearTimeout(preloadParkTimers[era]);
+          preloadParkTimers[era] = null;
+        }
+        try {
+          const state = players[era].getPlayerState();
+          if (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING) {
+            players[era].pauseVideo();
+            if (!mixMode[era]) {
+              players[era].seekTo(0, true);
+              seedArmed[era] = true;
+            }
+          }
+          players[era].mute();
+        } catch (err) { /* ignore */ }
+      });
+    }
+
+    function parkPreloadedSeed(era) {
+      const p = players[era];
+      if (!p || era === currentEra || mixMode[era]) return;
+      try {
+        p.pauseVideo();
+        p.seekTo(0, true);
+        p.mute();
+        seedArmed[era] = true;
+        console.log("[EraTV] armed seed", era);
+      } catch (err) { /* ignore */ }
+      schedulePreload(200);
+    }
+
+    function armBackgroundSeed(era) {
+      const p = players[era];
+      if (!p || era === currentEra || mixMode[era] || seedArmed[era]) return;
+      try {
+        p.mute();
+        p.setVolume(0);
+        p.seekTo(0, true);
+        p.playVideo();
+      } catch (err) {
+        try { p.loadVideoById(seedId(era)); } catch (e2) { /* ignore */ }
+      }
+    }
+
+    function kickPlay(gen) {
+      if (playKickTimer) clearTimeout(playKickTimer);
+      let tries = 0;
+      function tick() {
+        if (gen !== mediaGen || !player) return;
+        try {
+          const state = player.getPlayerState();
+          if (state === YT.PlayerState.PLAYING) return;
+          player.unMute();
+          player.setVolume(80);
+          player.playVideo();
+        } catch (err) { /* ignore */ }
+        tries += 1;
+        if (tries < 10) playKickTimer = setTimeout(tick, 350);
+        else if (gen === mediaGen) {
+          trackArtist.textContent = "Press play if audio is blocked";
+        }
+      }
+      playKickTimer = setTimeout(tick, 60);
+    }
+
+    function activateEraAudio(era) {
+      const next = players[era];
+      if (!next) {
+        pendingEra = era;
+        trackArtist.textContent = "Tuning in…";
+        createEraPlayer(era);
+        return;
+      }
+
+      const gen = ++mediaGen;
+      pendingEra = null;
+      errorStreak = 0;
+      ignoreEnded = true;
+      loadedEra = era;
+      inMixMode = !!mixMode[era];
+      player = next;
+      console.log("[EraTV] activate", era, { armed: !!seedArmed[era], mix: !!mixMode[era] });
+
+      pauseOtherPlayers(era);
+
+      try {
+        preferSmall(next);
+        next.unMute();
+        next.setVolume(80);
+        if (mixMode[era]) {
+          mixMode[era] = false;
+          inMixMode = false;
+          seedArmed[era] = false;
+          next.loadVideoById(seedId(era));
+        } else if (seedArmed[era]) {
+          next.seekTo(0, true);
+          next.playVideo();
+        } else {
+          next.playVideo();
+        }
+      } catch (err) {
+        try { next.loadVideoById(seedId(era)); } catch (e2) { /* ignore */ }
+      }
+
+      kickPlay(gen);
+      setTimeout(function () {
+        if (gen === mediaGen) ignoreEnded = false;
+      }, 800);
+    }
+
+    function startEraMix(era) {
+      const p = players[era];
+      if (!p || era !== currentEra || mixMode[era]) return;
+      const mix = mixId(era);
+      if (!mix) return;
+      mixMode[era] = true;
+      inMixMode = true;
+      seedArmed[era] = false;
+      console.log("[EraTV] era mix radio", era, mix);
+      try {
+        p.loadPlaylist({ list: mix, listType: "playlist", index: 0 });
+        if (p.setShuffle) p.setShuffle(true);
+        if (p.setLoop) p.setLoop(true);
+        p.unMute();
+        p.setVolume(80);
+      } catch (err) {
+        console.warn("[EraTV] mix failed", err);
+        mixMode[era] = false;
+        inMixMode = false;
+        p.loadVideoById(seedId(era));
+      }
+    }
+
+    function playlistAtEnd() {
+      try {
+        const list = player && player.getPlaylist && player.getPlaylist();
+        if (!list || !list.length) return true;
+        const idx = player.getPlaylistIndex();
+        return idx >= list.length - 1;
+      } catch (err) {
+        return false;
+      }
+    }
+
+    function createEraPlayer(era) {
+      if (players[era]) return;
+      const host = document.createElement("div");
+      host.id = "yt-" + era;
+      ytDock.appendChild(host);
+      players[era] = new YT.Player(host.id, {
+        width: 320,
+        height: 180,
+        videoId: seedId(era),
+        playerVars: playerVars(),
+        events: {
+          onReady: function () { onEraPlayerReady(era); },
+          onStateChange: function (event) { onEraStateChange(era, event); },
+          onError: function (event) { onEraError(era, event); }
+        }
+      });
+    }
+
+    window.onYouTubeIframeAPIReady = function () {
+      createEraPlayer("now");
+    };
+
+    function onEraPlayerReady(era) {
+      playerReadyMap[era] = true;
+      lockReferrer();
+      preferSmall(players[era]);
+      try { players[era].setVolume(era === currentEra ? 80 : 0); } catch (err) { /* ignore */ }
+
+      if (era === "now") {
+        playerReady = true;
+        setControlsEnabled(true);
+      }
+
+      if (pendingEra === era || era === currentEra) {
+        activateEraAudio(era);
+      } else {
+        armBackgroundSeed(era);
+      }
+
+      if (era === currentEra) syncMeta();
+    }
+
+    function onEraStateChange(era, event) {
+      const state = event.data;
+      const p = players[era];
+      if (!p) return;
+
+      if (era !== currentEra) {
+        if (state === YT.PlayerState.PLAYING && !mixMode[era] && !seedArmed[era]) {
+          preferSmall(p);
+          if (preloadParkTimers[era]) clearTimeout(preloadParkTimers[era]);
+          preloadParkTimers[era] = setTimeout(function () {
+            preloadParkTimers[era] = null;
+            parkPreloadedSeed(era);
+          }, 900);
+        }
+        return;
+      }
+
+      setPlaying(state === YT.PlayerState.PLAYING);
+      if (
+        state === YT.PlayerState.PLAYING ||
+        state === YT.PlayerState.PAUSED ||
+        state === YT.PlayerState.BUFFERING ||
+        state === YT.PlayerState.CUED
+      ) {
+        errorStreak = 0;
+        if (state === YT.PlayerState.PLAYING) {
+          ignoreEnded = false;
+          seedArmed[era] = true;
+          preferSmall(p);
+          if (era === "now") nowHasPlayed = true;
+          if (eraVideos[era]) scheduleEraVideo(era);
+          else schedulePreload(era === "now" ? 1500 : 400);
+        }
+        syncMeta();
+      }
+      if (state === YT.PlayerState.ENDED) {
+        if (ignoreEnded || mixMode[era]) return;
+        startEraMix(era);
+      }
+    }
+
+    function onEraError(era, event) {
+      if (era !== currentEra) {
+        seedArmed[era] = false;
+        return;
+      }
+      const code = event.data;
+      errorStreak += 1;
+      console.warn("[EraTV] player error", era, code);
+
+      if (code === 153) {
+        lockReferrer();
+        if (errorStreak < 2) players[era].loadVideoById(seedId(era));
+        else {
+          trackTitle.textContent = "Playback blocked";
+          trackArtist.textContent = "Serve over http:// and try Play";
+        }
+        return;
+      }
+
+      if (errorStreak < 3) {
+        seedArmed[era] = false;
+        players[era].loadVideoById(seedId(era));
+      } else if (!mixMode[era]) {
+        startEraMix(era);
+      }
+    }
+
+    function unlockAudio() {
+      if (audioUnlocked) return;
+      audioUnlocked = true;
+      if (player) {
+        try {
+          player.unMute();
+          player.setVolume(80);
+          if (!playing) player.playVideo();
+        } catch (err) { /* ignore */ }
+      }
+      schedulePreload(400);
+    }
+
+    /* ==========================================================
+       PLAYER CONTROLS & META
+       ========================================================== */
+    function setControlsEnabled(enabled) {
+      playBtn.disabled = !enabled;
+      prevBtn.disabled = !enabled;
+      nextBtn.disabled = !enabled;
+      seekBtn.disabled = !enabled;
+    }
+
+    function setPlaying(isPlaying) {
+      playing = isPlaying;
+      playIcon.innerHTML = isPlaying ? PAUSE_ICON : PLAY_ICON;
+      playBtn.setAttribute("aria-label", isPlaying ? "Pause" : "Play");
+      playIcon.classList.toggle("play-icon", !isPlaying);
+    }
+
+    function parseMeta(data) {
+      const raw = String((data && data.title) || "").trim();
+      if (!raw) return null;
+      const parts = raw.split(/\s[-|–]\s/);
+      if (parts.length >= 2) {
+        return {
+          title: parts[0].trim(),
+          artist: parts.slice(1).join(" · ").trim() || data.author || "Bollywood"
+        };
+      }
+      return { title: raw, artist: (data && data.author) || "Bollywood" };
+    }
+
+    function setArtwork(videoId) {
+      if (!videoId) { art.innerHTML = "<div></div>"; return; }
+      art.innerHTML = '<img alt="" src="https://i.ytimg.com/vi/' + videoId + '/hqdefault.jpg" />';
+    }
+
+    function syncMeta() {
+      if (!player || !player.getVideoData) return;
+      try {
+        const data = player.getVideoData() || {};
+        const parsed = parseMeta(data);
+        if (parsed) {
+          trackTitle.textContent = parsed.title;
+          trackArtist.textContent = parsed.artist;
+        }
+        if (data.video_id) setArtwork(data.video_id);
+        duration = player.getDuration() || duration;
+        const current = player.getCurrentTime() || 0;
+        timeCurrent.textContent = formatTime(current);
+        timeDuration.textContent = formatTime(duration);
+        seekFill.style.width = duration ? ((current / duration) * 100).toFixed(2) + "%" : "0%";
+      } catch (err) { /* ignore */ }
+    }
+
+    playBtn.addEventListener("click", () => {
+      unlockAudio();
+      if (!player) return;
+      player.unMute();
+      if (playing) player.pauseVideo();
+      else player.playVideo();
+    });
+
+    prevBtn.addEventListener("click", function () {
+      if (player && player.previousVideo) player.previousVideo();
+    });
+    nextBtn.addEventListener("click", function () {
+      if (!player) return;
+      if (!inMixMode && playlistAtEnd()) startEraMix(currentEra);
+      else player.nextVideo();
+    });
+
+    seekBtn.addEventListener("click", (event) => {
+      if (!player || !duration) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      const ratio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+      player.seekTo(duration * ratio, true);
+    });
+
+    /* ==========================================================
+       INITIALIZATION
+       ========================================================== */
+    buildRemote();
+    holdNowScreen();
+    setArtwork(seedId(DEFAULT_ERA));
+    setInterval(syncMeta, 500);
+    document.addEventListener("pointerdown", unlockAudio, { once: true });
+
+    const supabaseCfg = window.ERA_TV_SUPABASE || {};
+    const supabaseClient = (window.supabase && supabaseCfg.url && supabaseCfg.anonKey)
+      ? window.supabase.createClient(supabaseCfg.url, supabaseCfg.anonKey)
+      : null;
+
+    let presenceChannel = null;
+
+    function setListeningCount(n) {
+      const count = Math.max(1, Number(n) || 1);
+      onlineCount.textContent = count + " listening";
+    }
+
+    function trackListening() {
+      if (!presenceChannel) return;
+      presenceChannel.track({ era: currentEra, at: Date.now() }).catch(function () { /* ignore */ });
+    }
+
+    function startListeningPresence() {
+      if (!supabaseClient) {
+        setListeningCount(1);
+        return;
+      }
+      presenceChannel = supabaseClient.channel("erats-listening", {
+        config: { presence: { key: (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()) } }
+      });
+      presenceChannel.on("presence", { event: "sync" }, function () {
+        const state = presenceChannel.presenceState();
+        setListeningCount(Object.keys(state).length);
+      });
+      presenceChannel.subscribe(function (status) {
+        if (status === "SUBSCRIBED") trackListening();
+      });
+    }
+
+    startListeningPresence();
+
+    function setShareStatus(message, kind) {
+      shareStatus.textContent = message || "";
+      shareStatus.classList.toggle("is-ok", kind === "ok");
+      shareStatus.classList.toggle("is-err", kind === "err");
+    }
+
+    function normalizePlaylistUrl(raw) {
+      const value = String(raw || "").trim();
+      const match = value.match(/open\.spotify\.com\/playlist\/([A-Za-z0-9]+)/i)
+        || value.match(/^spotify:playlist:([A-Za-z0-9]+)$/i);
+      if (!match) return "";
+      return "https://open.spotify.com/playlist/" + match[1];
+    }
+
+    function closeShareCard() {
+      if (!shareCard.classList.contains("is-open")) return;
+      shareCard.classList.remove("is-open");
+      setShareStatus("");
+      positionShareCard();
+    }
+
+    document.addEventListener("pointerdown", function (event) {
+      if (!shareCard.classList.contains("is-open")) return;
+      if (shareCard.contains(event.target)) return;
+      closeShareCard();
+    });
+
+    shareForm.addEventListener("submit", async function (event) {
+      event.preventDefault();
+      if (!shareCard.classList.contains("is-open")) {
+        shareCard.classList.add("is-open");
+        positionShareCard();
+        setTimeout(function () { shareName.focus(); }, 80);
+        return;
+      }
+      const name = String(shareName.value || "").trim();
+      const playlistUrl = normalizePlaylistUrl(shareInput.value);
+      if (!name) {
+        setShareStatus("Tell us your name.", "err");
+        return;
+      }
+      if (!playlistUrl) {
+        setShareStatus("Paste a Spotify playlist link.", "err");
+        return;
+      }
+      if (!supabaseClient) {
+        setShareStatus("Add your Supabase URL and anon key in config.js.", "err");
+        return;
+      }
+
+      shareSubmit.disabled = true;
+      setShareStatus("Saving…");
+      const { error } = await supabaseClient.from("shared_playlists").insert({
+        name: name,
+        playlist_url: playlistUrl,
+        era: currentEra
+      });
+      shareSubmit.disabled = false;
+
+      if (error) {
+        console.warn("[EraTV] share failed", error);
+        setShareStatus(error.message || "Could not save. Check Supabase setup.", "err");
+        return;
+      }
+
+      shareName.value = "";
+      shareInput.value = "";
+      shareCard.classList.remove("is-open");
+      setShareStatus("Thanks — saved for review.", "ok");
+    });
+
+    setTimeout(function () {
+      shareCard.classList.add("is-visible");
+      positionShareCard();
+    }, 5000);
+
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+  </script>
+</body>
+</html>
