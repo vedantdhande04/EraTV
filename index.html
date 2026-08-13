@@ -2519,6 +2519,13 @@
         return;
       }
       if (curatedPlaylistId(era)) {
+        try {
+          if (player && playlistAtEnd()) player.playVideoAt(0);
+          else if (player) player.nextVideo();
+        } catch (err) { /* ignore */ }
+        watchPlayStart(era);
+        return;
+      }
       if (mixMode[era] || inMixMode) {
         try { if (player) player.nextVideo(); } catch (err) { /* ignore */ }
         return;
