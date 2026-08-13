@@ -369,6 +369,19 @@
     }
     .share-form-status.is-ok { color: #1ed760; }
     .share-form-status.is-err { color: #ffb4b4; }
+    .share-form-cooldown {
+      display: none;
+      margin: 0;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1.4;
+      color: rgba(255, 255, 255, 0.88);
+    }
+    .share-form-card.is-cooling .share-form-cooldown { display: block; }
+    .share-form-card.is-cooling .share-form-input,
+    .share-form-card.is-cooling .share-form-submit { display: none; }
+    .share-form-input:disabled,
+    .share-form-submit:disabled { opacity: 0.55; cursor: not-allowed; }
 
     /* ============================================================
        6. FILE WARNING
@@ -1251,6 +1264,7 @@
         autocomplete="off"
       />
       <button class="share-form-submit" id="shareSubmit" type="submit">Share</button>
+      <p class="share-form-cooldown" id="shareCooldown"></p>
       <p class="share-form-status" id="shareStatus"></p>
     </form>
   </aside>
@@ -1412,6 +1426,7 @@
     const shareMessage  = document.getElementById("shareMessage");
     const shareSubmit   = document.getElementById("shareSubmit");
     const shareStatus   = document.getElementById("shareStatus");
+    const shareCooldown = document.getElementById("shareCooldown");
     const onlineCount   = document.getElementById("onlineCount");
     const playBtn       = document.getElementById("playBtn");
     const playIcon      = document.getElementById("playIcon");
@@ -2485,16 +2500,80 @@
       }
     }
 
+    const SHARE_COOLDOWN_MS = 12 * 60 * 60 * 1000;
+    const SHARE_COOLDOWN_KEY = "eratv-last-share";
+    let shareCooldownTimer = null;
+
+    function readLastShareAt() {
+      try {
+        const n = Number(localStorage.getItem(SHARE_COOLDOWN_KEY) || 0);
+        return Number.isFinite(n) ? n : 0;
+      } catch (err) {
+        return 0;
+      }
+    }
+
+    function writeLastShareAt(at) {
+      try { localStorage.setItem(SHARE_COOLDOWN_KEY, String(at)); } catch (err) { /* ignore */ }
+    }
+
+    function shareCooldownLeft() {
+      return Math.max(0, readLastShareAt() + SHARE_COOLDOWN_MS - Date.now());
+    }
+
+    function formatShareCooldown(ms) {
+      const total = Math.max(0, Math.ceil(ms / 1000));
+      const hours = Math.floor(total / 3600);
+      const mins = Math.floor((total % 3600) / 60);
+      const secs = total % 60;
+      if (hours > 0) return hours + "h " + mins + "m";
+      if (mins > 0) return mins + "m " + secs + "s";
+      return secs + "s";
+    }
+
+    function stopShareCooldownTick() {
+      if (!shareCooldownTimer) return;
+      clearInterval(shareCooldownTimer);
+      shareCooldownTimer = null;
+    }
+
+    function setShareFormCooling(cooling) {
+      shareFormCard.classList.toggle("is-cooling", cooling);
+      shareName.disabled = cooling;
+      shareInput.disabled = cooling;
+      shareMessage.disabled = cooling;
+      shareSubmit.disabled = cooling;
+      if (!cooling) shareCooldown.textContent = "";
+    }
+
+    function updateShareCooldownUI() {
+      const left = shareCooldownLeft();
+      if (left <= 0) {
+        stopShareCooldownTick();
+        setShareFormCooling(false);
+        return false;
+      }
+      setShareFormCooling(true);
+      shareCooldown.textContent = "You can share again in " + formatShareCooldown(left);
+      return true;
+    }
+
     function closeShareForm() {
       if (!shareFormCard.classList.contains("is-open")) return;
       shareFormCard.classList.remove("is-open");
       setShareStatus("");
+      stopShareCooldownTick();
     }
 
     function openShareForm() {
       shareFormCard.classList.add("is-open");
       setShareStatus("");
       positionShareChrome();
+      if (updateShareCooldownUI()) {
+        stopShareCooldownTick();
+        shareCooldownTimer = setInterval(updateShareCooldownUI, 1000);
+        return;
+      }
       setTimeout(function () { shareName.focus(); }, 50);
     }
 
@@ -2511,6 +2590,11 @@
 
     shareForm.addEventListener("submit", async function (event) {
       event.preventDefault();
+      if (updateShareCooldownUI()) {
+        stopShareCooldownTick();
+        shareCooldownTimer = setInterval(updateShareCooldownUI, 1000);
+        return;
+      }
       const name = String(shareName.value || "").trim();
       const playlistUrl = normalizePlaylistUrl(shareInput.value);
       const note = String(shareMessage.value || "").trim().slice(0, SHARE_NOTE_MAX);
@@ -2560,6 +2644,7 @@
       }
 
       appendShareLine(result.data || payload);
+      writeLastShareAt(Date.now());
       shareName.value = "";
       shareInput.value = "";
       shareMessage.value = "";
