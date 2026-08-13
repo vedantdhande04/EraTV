@@ -105,15 +105,20 @@
        ============================================================ */
     .brand-tag {
       position: fixed;
-      top: 14px;
-      left: 18px;
-      font-size: 0.7rem;
-      font-weight: 700;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
-      color: var(--ink-warm);
+      top: 32px;
+      left: 50%;
+      transform: translateX(-50%);
       z-index: 50;
+      padding: 8px 0;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.22em;
+      line-height: 1.2;
+      text-transform: uppercase;
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
       user-select: none;
+      pointer-events: none;
     }
 
     .online-pill {
@@ -269,6 +274,18 @@
       font-style: italic;
       color: rgba(255, 255, 255, 0.58);
     }
+    .share-line-credit {
+      color: rgba(255, 255, 255, 0.62);
+      font-style: italic;
+    }
+    .share-line-credit-link {
+      color: rgba(255, 255, 255, 0.82);
+      font-weight: 700;
+      font-style: normal;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .share-line-credit-link:hover { color: #1ed760; }
 
     .share-open-btn {
       position: fixed;
@@ -969,7 +986,11 @@
       .art { width: 42px; height: 42px; border-radius: 6px; }
       .title { font-size: 13px; }
       .play-btn { width: 36px; height: 36px; }
-      .brand-tag { display: none; }
+      .brand-tag {
+        top: 22px;
+        padding: 6px 0;
+        font-size: 11px;
+      }
       .online-pill {
         top: 22px;
         left: 22px;
@@ -990,7 +1011,11 @@
     body.is-phone .tv-img {
       object-position: center 78%;
     }
-    body.is-phone .brand-tag { display: none; }
+    body.is-phone .brand-tag {
+      top: 10px;
+      padding: 6px 0;
+      font-size: 11px;
+    }
     body.is-phone .online-pill {
       top: 10px;
       left: 10px;
@@ -2379,15 +2404,28 @@
       return line;
     }
 
+    function makeCreditLine(index) {
+      const line = document.createElement("div");
+      line.className = "share-line share-line-credit shift-" + (index % 4);
+      line.innerHTML =
+        'made with love by <a class="share-line-credit-link" href="https://www.instagram.com/codvyn/" target="_blank" rel="noopener noreferrer">codvyn</a>';
+      return line;
+    }
+
+    function appendFeedItems(target) {
+      shareRows.forEach(function (row, index) {
+        target.appendChild(makeShareLine(row, index));
+        if ((index + 1) % 5 === 0) target.appendChild(makeCreditLine(index + 1));
+      });
+    }
+
     function renderShareFeed() {
       shareFeedInner.innerHTML = "";
       shareFeedClone.innerHTML = "";
-      shareRows.forEach(function (row, index) {
-        shareFeedInner.appendChild(makeShareLine(row, index));
-        shareFeedClone.appendChild(makeShareLine(row, index));
-      });
-      const count = shareRows.length;
-      shareFeed.classList.toggle("is-looping", count > 0);
+      appendFeedItems(shareFeedInner);
+      appendFeedItems(shareFeedClone);
+      const count = shareRows.length + Math.floor(shareRows.length / 5);
+      shareFeed.classList.toggle("is-looping", shareRows.length > 0);
       shareFeedTrack.style.animationDuration = Math.max(22, count * 8) + "s";
     }
 
