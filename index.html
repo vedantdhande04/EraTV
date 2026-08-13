@@ -478,8 +478,6 @@
       transform: translate(-50%, -47%);
     }
     .tv-screen.has-yt .screen-content { opacity: 0; }
-    .tv-screen.has-yt .screen-noise,
-    .tv-screen.has-yt .screen-noise.active { opacity: 0.2; }
 
     /* Screen glow (bleeds beyond bezel) */
     .tv-glow {
@@ -543,9 +541,13 @@
       opacity: 0;
       pointer-events: none;
       z-index: 6;
-      transition: opacity 0.15s ease;
+      transition: none;
     }
-    .screen-noise.active { opacity: 0.75; }
+    .screen-noise.active { opacity: 1; }
+    .screen-noise.active.is-fading {
+      opacity: 0;
+      transition: opacity 1s ease;
+    }
 
     /* CRT glass — between video and the TV PNG, clipped to the hole */
     .screen-fx {
@@ -1430,6 +1432,9 @@
     let audioUnlocked = false;
     let nowHasPlayed = false;
     let preloadTimer = null;
+    let noiseHoldTimer = null;
+    let noiseFadeTimer = null;
+    let coveredVideoKey = "";
 
     /* ==========================================================
        DOM REFERENCES
@@ -1857,7 +1862,7 @@
           p.unMute();
           p.setVolume(80);
         } catch (err) { /* ignore */ }
-        mountYtOnScreen(era);
+        coverScreen();
         kickPlay(++mediaGen);
         setTimeout(function () { ignoreEnded = false; }, 800);
         return true;
@@ -1875,7 +1880,7 @@
         if (player.setLoop) player.setLoop(true);
         player.playVideo();
       } catch (err) { /* ignore */ }
-      mountYtOnScreen(era);
+      coverScreen();
       kickPlay(++mediaGen);
       setTimeout(function () { ignoreEnded = false; }, 800);
       return true;
@@ -2020,6 +2025,7 @@
 
     function startNoise(gen) {
       switchingEra = true;
+      screenNoise.classList.remove("is-fading");
       screenNoise.classList.add("active");
       screenContent.classList.add("transitioning");
       cancelAnimationFrame(noiseRaf);
@@ -2031,10 +2037,56 @@
       noiseRaf = requestAnimationFrame(loop);
     }
 
+    function clearNoiseTimers() {
+      if (noiseHoldTimer) {
+        clearTimeout(noiseHoldTimer);
+        noiseHoldTimer = null;
+      }
+      if (noiseFadeTimer) {
+        clearTimeout(noiseFadeTimer);
+        noiseFadeTimer = null;
+      }
+    }
+
+    function coverScreen() {
+      clearNoiseTimers();
+      startNoise(screenGen);
+    }
+
+    function currentVideoKey() {
+      try {
+        const data = player && player.getVideoData && player.getVideoData();
+        const id = data && data.video_id;
+        return id ? (currentEra + ":" + id) : "";
+      } catch (err) {
+        return "";
+      }
+    }
+
+    function beginSongReveal() {
+      const key = currentVideoKey();
+      if (key && key === coveredVideoKey && noiseHoldTimer) return;
+      coveredVideoKey = key || coveredVideoKey;
+      const gen = screenGen;
+      startNoise(gen);
+      clearNoiseTimers();
+      noiseHoldTimer = setTimeout(function () {
+        noiseHoldTimer = null;
+        if (gen !== screenGen) return;
+        screenNoise.classList.add("is-fading");
+        noiseFadeTimer = setTimeout(function () {
+          noiseFadeTimer = null;
+          if (gen !== screenGen) return;
+          stopNoise(gen);
+        }, 1000);
+      }, 3000);
+    }
+
     function stopNoise(gen) {
       if (gen !== screenGen) return;
       cancelAnimationFrame(noiseRaf);
       screenNoise.classList.remove("active");
+      screenNoise.classList.remove("is-fading");
       screenContent.classList.remove("transitioning");
       switchingEra = false;
     }
@@ -2078,6 +2130,8 @@
 
     function playStaticTransition(eraId, callback) {
       const gen = ++screenGen;
+      coveredVideoKey = "";
+      clearNoiseTimers();
       abortEraVideo();
       startNoise(gen);
 
@@ -2351,9 +2405,9 @@
         try { loadEraAudio(next, era); } catch (e2) { /* ignore */ }
       }
 
-      mountYtOnScreen(era);
+      coverScreen();
       kickPlay(gen);
-      if (curatedPlaylistId(era)) watchPlayStart(era);
+      if (audioUnlocked && curatedPlaylistId(era)) watchPlayStart(era);
       setTimeout(function () {
         if (gen === mediaGen) ignoreEnded = false;
       }, 800);
@@ -2474,12 +2528,17 @@
           hideCaptions(p);
           if (era === "now") nowHasPlayed = true;
           mountYtOnScreen(era);
+          beginSongReveal();
           schedulePreload(era === "now" ? 1500 : 400);
           if (curatedPlaylistId(era) && !usingPlaylist[era]) createPlaylistPlayer(era);
+        } else if (state === YT.PlayerState.BUFFERING || state === YT.PlayerState.CUED) {
+          const key = currentVideoKey();
+          if (key && key !== coveredVideoKey) coverScreen();
         }
         syncMeta();
       }
       if (state === YT.PlayerState.ENDED) {
+        coverScreen();
         if (ignoreEnded) return;
         if (curatedPlaylistId(era)) {
           if (!usingPlaylist[era]) {
@@ -2499,6 +2558,7 @@
 
     let playWatchTimer = null;
     function watchPlayStart(era) {
+      if (!audioUnlocked) return;
       if (playWatchTimer) clearTimeout(playWatchTimer);
       playWatchTimer = setTimeout(function () {
         playWatchTimer = null;
@@ -2516,6 +2576,7 @@
     }
 
     function skipBlockedVideo(era) {
+      coverScreen();
       if (curatedPlaylistId(era) && !usingPlaylist[era]) {
         const next = rerollSessionSeed(era);
         if (next && players[era]) {
@@ -2589,6 +2650,7 @@
           if (!playing) player.playVideo();
         } catch (err) { /* ignore */ }
       }
+      if (curatedPlaylistId(currentEra)) watchPlayStart(currentEra);
       schedulePreload(400);
     }
 
@@ -2675,10 +2737,12 @@
     });
 
     prevBtn.addEventListener("click", function () {
+      coverScreen();
       if (player && player.previousVideo) player.previousVideo();
     });
     nextBtn.addEventListener("click", function () {
       if (!player) return;
+      coverScreen();
       if (curatedPlaylistId(currentEra)) {
         if (!usingPlaylist[currentEra]) {
           switchToPlaylist(currentEra);
