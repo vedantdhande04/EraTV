@@ -2519,24 +2519,26 @@
     }
 
     const SHARE_COOLDOWN_MS = 12 * 60 * 60 * 1000;
-    const SHARE_COOLDOWN_KEY = "eratv-last-share";
+    let shareCooldownUntil = 0;
     let shareCooldownTimer = null;
 
-    function readLastShareAt() {
-      try {
-        const n = Number(localStorage.getItem(SHARE_COOLDOWN_KEY) || 0);
-        return Number.isFinite(n) ? n : 0;
-      } catch (err) {
+    function shareCooldownLeft() {
+      return Math.max(0, shareCooldownUntil - Date.now());
+    }
+
+    async function fetchShareCooldown() {
+      if (!supabaseClient) {
+        shareCooldownUntil = 0;
         return 0;
       }
-    }
-
-    function writeLastShareAt(at) {
-      try { localStorage.setItem(SHARE_COOLDOWN_KEY, String(at)); } catch (err) { /* ignore */ }
-    }
-
-    function shareCooldownLeft() {
-      return Math.max(0, readLastShareAt() + SHARE_COOLDOWN_MS - Date.now());
+      const { data, error } = await supabaseClient.rpc("share_cooldown_remaining");
+      if (error) {
+        console.warn("[EraTV] cooldown check failed", error);
+        return shareCooldownLeft();
+      }
+      const secs = Math.max(0, Number(data) || 0);
+      shareCooldownUntil = secs > 0 ? Date.now() + secs * 1000 : 0;
+      return secs;
     }
 
     function formatShareCooldown(ms) {
@@ -2583,10 +2585,11 @@
       stopShareCooldownTick();
     }
 
-    function openShareForm() {
+    async function openShareForm() {
       shareFormCard.classList.add("is-open");
       setShareStatus("");
       positionShareChrome();
+      await fetchShareCooldown();
       if (updateShareCooldownUI()) {
         stopShareCooldownTick();
         shareCooldownTimer = setInterval(updateShareCooldownUI, 1000);
@@ -2608,6 +2611,7 @@
 
     shareForm.addEventListener("submit", async function (event) {
       event.preventDefault();
+      await fetchShareCooldown();
       if (updateShareCooldownUI()) {
         stopShareCooldownTick();
         shareCooldownTimer = setInterval(updateShareCooldownUI, 1000);
@@ -2657,12 +2661,20 @@
 
       if (result.error) {
         console.warn("[EraTV] share failed", result.error);
+        const cool = String(result.error.message || "").match(/SHARE_COOLDOWN:(\d+)/);
+        if (cool) {
+          shareCooldownUntil = Date.now() + Number(cool[1]) * 1000;
+          updateShareCooldownUI();
+          stopShareCooldownTick();
+          shareCooldownTimer = setInterval(updateShareCooldownUI, 1000);
+          return;
+        }
         setShareStatus(result.error.message || "Could not save. Check Supabase setup.", "err");
         return;
       }
 
       appendShareLine(result.data || payload);
-      writeLastShareAt(Date.now());
+      shareCooldownUntil = Date.now() + SHARE_COOLDOWN_MS;
       shareName.value = "";
       shareInput.value = "";
       shareMessage.value = "";
