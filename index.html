@@ -517,27 +517,6 @@
     }
     .screen-content.transitioning { opacity: 0; }
 
-    .tv-screen.is-now .screen-content { opacity: 1; }
-    .tv-screen.is-now .era-badge { display: none; }
-    .tv-screen.is-now .era-tagline {
-      display: inline-block;
-      max-width: 14em;
-      padding: 8px 12px;
-      border-radius: 8px;
-      color: #fff;
-      opacity: 1;
-      font-size: clamp(0.62rem, 1.25vw, 0.82rem);
-      font-weight: 800;
-      letter-spacing: 0.08em;
-      line-height: 1.4;
-      text-align: center;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
-      background: rgba(0, 0, 0, 0.62);
-      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
-    }
-    .tv-screen.is-now .screen-noise,
-    .tv-screen.is-now .screen-noise.active { opacity: 0.7; }
-
     .era-badge {
       font-family: 'Righteous', cursive;
       font-size: clamp(2rem, 5vw, 4.5rem);
@@ -552,6 +531,7 @@
       text-transform: uppercase;
       opacity: 0.8;
     }
+    .era-tagline:empty { display: none; }
 
     /* Noise canvas */
     .screen-noise {
@@ -1047,6 +1027,12 @@
     body.is-phone .tv-img {
       object-position: center 78%;
     }
+    body.is-phone .tv-screen {
+      -webkit-mask-size: 100% 100%;
+      mask-size: 100% 100%;
+      -webkit-mask-repeat: no-repeat;
+      mask-repeat: no-repeat;
+    }
     body.is-phone .brand-tag {
       top: auto;
       left: auto;
@@ -1179,7 +1165,7 @@
         ></video>
         <div class="screen-content" id="screenContent">
           <div class="era-badge" id="eraBadge"></div>
-          <div class="era-tagline" id="eraTagline">Press a decade below to travel back</div>
+          <div class="era-tagline" id="eraTagline"></div>
         </div>
         <canvas class="screen-noise" id="screenNoise" width="128" height="96"></canvas>
         <div class="screen-fx" aria-hidden="true">
@@ -1306,12 +1292,18 @@
       { id: "90s",   label: "90s",   tagline: "Dil Se",           screenClass: "era-90s"   },
       { id: "2000s", label: "2000s", tagline: "Millennium Hits",  screenClass: "era-2000s" },
       { id: "2010s", label: "2010s", tagline: "New Wave",         screenClass: "era-2010s" },
-      { id: "now",   label: "Now",   tagline: "Press a decade below to travel back", screenClass: "era-now" }
+      { id: "now",   label: "Now",   tagline: "", screenClass: "era-now" }
     ];
 
-    /* Optional real YouTube playlists. 60s uses this instead of seed → Mix. */
+    /* Real YouTube playlists. Seed starts first; playlist takes over on next/end. */
     const eraYtPlaylists = {
-      "60s": "PL9528B4412EC7A3A4"
+      "60s":   "PL9528B4412EC7A3A4",
+      "70s":   "PLgCV-sHZhmPJPm-4DPbNwC3UdonuURgcW",
+      "80s":   "PLLounUW9rgqGDmPxbZBerszf0dBq_M93b",
+      "90s":   "PLMRKdK25AuPVjHl9Kdb-gkBy0Cm7Zi2xo",
+      "2000s": "PL71gzSkiT0QkByFoGuRrMfeWQhywnyGDO",
+      "2010s": "PLLounUW9rgqHr6YYR7r4oQOIeqdCZ7gO8",
+      "now":   "PLO7-VO1D0_6MnOoKQGmYNY2OoCOP3GRfm"
     };
 
     /* One seed song per era, then a shuffled same-era Bollywood pool.
@@ -1409,11 +1401,14 @@
     const mixMode = {};
     const preloadParkTimers = {};
     const sessionSeeds = {};
-    const triedSeeds = { "60s": {} };
+    const triedSeeds = {};
     (function pickSessionSeeds() {
-      const ids = ((eraPlaylists["60s"] && eraPlaylists["60s"].ids) || []).filter(Boolean);
-      if (!ids.length) return;
-      sessionSeeds["60s"] = ids[Math.floor(Math.random() * ids.length)];
+      Object.keys(eraYtPlaylists).forEach(function (era) {
+        const ids = ((eraPlaylists[era] && eraPlaylists[era].ids) || []).filter(Boolean);
+        if (!ids.length) return;
+        triedSeeds[era] = {};
+        sessionSeeds[era] = ids[Math.floor(Math.random() * ids.length)];
+      });
     })();
     let player      = null;
     let playerReady = false;
@@ -1517,9 +1512,16 @@
       }
     }
 
+    function holeVisibility(r, g, b, a) {
+      const clear = 1 - a / 255;
+      const lum = (r + g + b) / 3;
+      const black = a > 40 ? Math.max(0, (28 - lum) / 28) : 0;
+      return Math.max(clear, black);
+    }
+
     function measureTransparentHole(img) {
-      const maxW = 480;
-      const scale = Math.min(1, maxW / img.naturalWidth);
+      const scanMax = 960;
+      const scale = Math.min(1, scanMax / img.naturalWidth);
       const w = Math.max(1, Math.round(img.naturalWidth * scale));
       const h = Math.max(1, Math.round(img.naturalHeight * scale));
       const canvas = document.createElement("canvas");
@@ -1553,7 +1555,7 @@
       }
       if (!box) return { frac: PHONE_FRAC_FALLBACK, maskUrl: null };
 
-      const pad = 1;
+      const pad = 2;
       const minX = Math.max(0, box.minX - pad);
       const minY = Math.max(0, box.minY - pad);
       const maxX = Math.min(w - 1, box.maxX + pad);
@@ -1565,25 +1567,39 @@
         height: (maxY - minY + 1) / h
       };
 
-      const mw = maxX - minX + 1;
-      const mh = maxY - minY + 1;
-      const mask = document.createElement("canvas");
-      mask.width = mw;
-      mask.height = mh;
-      const mctx = mask.getContext("2d");
-      const mid = mctx.createImageData(mw, mh);
-      for (let y = 0; y < mh; y++) {
-        for (let x = 0; x < mw; x++) {
-          const i = ((minY + y) * w + (minX + x)) * 4;
-          const a = data[i + 3];
-          const r = data[i], g = data[i + 1], b = data[i + 2];
-          const hole = a < 28 || (r + g + b < 20 && a > 180);
-          const o = (y * mw + x) * 4;
-          const v = hole ? 255 : 0;
-          mid.data[o] = mid.data[o + 1] = mid.data[o + 2] = mid.data[o + 3] = v;
-        }
+      const nMinX = Math.max(0, Math.floor(minX / scale));
+      const nMinY = Math.max(0, Math.floor(minY / scale));
+      const nMaxX = Math.min(img.naturalWidth, Math.ceil((maxX + 1) / scale));
+      const nMaxY = Math.min(img.naturalHeight, Math.ceil((maxY + 1) / scale));
+      const nw = Math.max(1, nMaxX - nMinX);
+      const nh = Math.max(1, nMaxY - nMinY);
+      const outW = Math.min(1600, nw);
+      const outH = Math.max(1, Math.round(nh * (outW / nw)));
+
+      const src = document.createElement("canvas");
+      src.width = outW;
+      src.height = outH;
+      const sctx = src.getContext("2d", { willReadFrequently: true });
+      sctx.imageSmoothingEnabled = true;
+      sctx.imageSmoothingQuality = "high";
+      sctx.drawImage(img, nMinX, nMinY, nw, nh, 0, 0, outW, outH);
+      const srcData = sctx.getImageData(0, 0, outW, outH);
+      const mid = sctx.createImageData(outW, outH);
+      for (let i = 0; i < srcData.data.length; i += 4) {
+        const vis = holeVisibility(srcData.data[i], srcData.data[i + 1], srcData.data[i + 2], srcData.data[i + 3]);
+        mid.data[i] = mid.data[i + 1] = mid.data[i + 2] = 255;
+        mid.data[i + 3] = Math.round(vis * 255);
       }
-      mctx.putImageData(mid, 0, 0);
+      sctx.putImageData(mid, 0, 0);
+
+      const mask = document.createElement("canvas");
+      mask.width = outW;
+      mask.height = outH;
+      const mctx = mask.getContext("2d");
+      mctx.imageSmoothingEnabled = true;
+      mctx.imageSmoothingQuality = "high";
+      mctx.filter = "blur(1.25px)";
+      mctx.drawImage(src, 0, 0);
       return { frac: frac, maskUrl: mask.toDataURL("image/png") };
     }
 
@@ -2063,7 +2079,6 @@
     function playStaticTransition(eraId, callback) {
       const gen = ++screenGen;
       abortEraVideo();
-      tvScreen.classList.remove("is-now");
       startNoise(gen);
 
       setTimeout(function () {
@@ -2075,13 +2090,7 @@
     }
 
     function holdNowScreen() {
-      const gen = ++screenGen;
-      abortEraVideo();
-      tvScreen.classList.add("is-now");
-      applyEraScreen("now");
-      screenContent.classList.remove("transitioning");
-      startNoise(gen);
-      return gen;
+      return playStaticTransition("now");
     }
 
     /* ==========================================================
