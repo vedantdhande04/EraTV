@@ -987,7 +987,6 @@
       .title { font-size: 13px; }
       .play-btn { width: 36px; height: 36px; }
       .brand-tag {
-        top: 22px;
         padding: 6px 0;
         font-size: 11px;
       }
@@ -1012,9 +1011,13 @@
       object-position: center 78%;
     }
     body.is-phone .brand-tag {
-      top: 10px;
-      padding: 6px 0;
-      font-size: 11px;
+      top: auto;
+      left: auto;
+      right: 10px;
+      bottom: 88px;
+      transform: none;
+      padding: 8px 0;
+      font-size: 12px;
     }
     body.is-phone .online-pill {
       top: 10px;
@@ -1053,18 +1056,19 @@
       gap: 8px;
     }
     body.is-phone .art { width: 40px; height: 40px; }
-    body.is-phone .share-line { font-size: 12px; max-width: 92%; }
+    body.is-phone .share-line { font-size: 11px; max-width: 90%; }
     body.is-phone .share-line.shift-1 { margin-left: 10%; }
     body.is-phone .share-line.shift-2 { margin-left: 4%; }
     body.is-phone .share-line.shift-3 { margin-left: 14%; }
-    body.is-phone .share-line-note { font-size: 11px; }
+    body.is-phone .share-line-note { font-size: 10px; margin-top: 2px; }
+    body.is-phone .share-line-arrow { width: 9px; height: 9px; }
     body.is-phone .share-feed-scroll {
       -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
       mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
     }
     body.is-phone .share-feed-inner {
-      gap: 18px;
-      padding: 14px 2px;
+      gap: 12px;
+      padding: 10px 2px;
     }
     body.is-phone .share-feed.is-looping .share-feed-track {
       animation-duration: 28s;
@@ -1096,7 +1100,7 @@
   <!-- ============ SCENE ============ -->
   <div class="scene" id="scene">
 
-    <div class="brand-tag">EraTV</div>
+    <div class="brand-tag" id="brandTag">Era TV</div>
     <div class="online-pill" id="onlinePill" aria-live="polite">
       <span class="online-dot" aria-hidden="true"></span>
       <span id="onlineCount">1 listening</span>
@@ -1400,6 +1404,7 @@
     const shareFeedClone = document.getElementById("shareFeedClone");
     const shareOpenBtn  = document.getElementById("shareOpenBtn");
     const shareFormCard = document.getElementById("shareFormCard");
+    const brandTag      = document.getElementById("brandTag");
     const bottomChrome  = document.getElementById("bottomChrome");
     const shareForm     = document.getElementById("shareForm");
     const shareInput    = document.getElementById("shareInput");
@@ -1597,12 +1602,12 @@
 
       if (isPhoneLayout()) {
         const top = 46;
-        const gap = 10;
+        const gap = 26;
         shareFeed.style.left = "12px";
         shareFeed.style.right = "12px";
         shareFeed.style.width = "auto";
         shareFeed.style.top = top + "px";
-        shareFeed.style.height = Math.max(64, tvTop - top - gap) + "px";
+        shareFeed.style.height = Math.max(52, tvTop - top - gap) + "px";
         return;
       }
 
@@ -1616,21 +1621,52 @@
     }
 
     function positionShareChrome() {
-      const liftNeeded = isPhoneLayout() || window.innerWidth <= 1100;
+      const phone = isPhoneLayout();
+      const liftNeeded = phone || window.innerWidth <= 1100;
       if (!liftNeeded) {
+        shareOpenBtn.style.top = "";
         shareOpenBtn.style.bottom = "";
         shareOpenBtn.style.left = "";
+        shareOpenBtn.style.right = "";
+        shareFormCard.style.top = "";
         shareFormCard.style.bottom = "";
         shareFormCard.style.left = "";
+        brandTag.style.top = "";
+        brandTag.style.bottom = "";
+        brandTag.style.left = "";
+        brandTag.style.right = "";
+        brandTag.style.transform = "";
         return;
       }
       const chromeTop = bottomChrome.getBoundingClientRect().top;
-      const lift = Math.max(12, window.innerHeight - chromeTop + 10);
-      const left = (isPhoneLayout() || window.innerWidth <= 480) ? 10 : 22;
-      shareOpenBtn.style.left = left + "px";
-      shareOpenBtn.style.bottom = lift + "px";
-      shareFormCard.style.left = left + "px";
-      shareFormCard.style.bottom = (lift + shareOpenBtn.offsetHeight + 10) + "px";
+      const side = phone || window.innerWidth <= 480 ? 10 : 22;
+      const gap = phone ? 18 : 12;
+      const btnH = shareOpenBtn.offsetHeight || 32;
+      const top = Math.max(8, chromeTop - btnH - gap);
+      shareOpenBtn.style.top = top + "px";
+      shareOpenBtn.style.bottom = "auto";
+      shareOpenBtn.style.left = side + "px";
+      shareOpenBtn.style.right = "auto";
+      shareFormCard.style.top = "auto";
+      shareFormCard.style.left = side + "px";
+      shareFormCard.style.bottom = (window.innerHeight - top + 10) + "px";
+      if (phone) {
+        brandTag.style.top = top + "px";
+        brandTag.style.bottom = "auto";
+        brandTag.style.left = "auto";
+        brandTag.style.right = side + "px";
+        brandTag.style.transform = "none";
+        brandTag.style.lineHeight = btnH + "px";
+        brandTag.style.padding = "0";
+      } else {
+        brandTag.style.top = "";
+        brandTag.style.bottom = "";
+        brandTag.style.left = "";
+        brandTag.style.right = "";
+        brandTag.style.transform = "";
+        brandTag.style.lineHeight = "";
+        brandTag.style.padding = "";
+      }
     }
 
     function relayout() {
