@@ -1284,6 +1284,11 @@
       { id: "now",   label: "Now",   tagline: "Press a decade below to travel back", screenClass: "era-now" }
     ];
 
+    /* Optional real YouTube playlists. 60s uses this instead of seed → Mix. */
+    const eraYtPlaylists = {
+      "60s": "PL9528B4412EC7A3A4"
+    };
+
     /* One seed song per era, then a shuffled same-era Bollywood pool.
        After the curated pool, YouTube Mix (RD + seed) continues the station. */
     const eraPlaylists = {
@@ -1710,6 +1715,22 @@
       return seed ? "RD" + seed : "";
     }
 
+    function curatedPlaylistId(era) {
+      return eraYtPlaylists[era] || "";
+    }
+
+    function loadEraAudio(p, era) {
+      if (!p) return;
+      const list = curatedPlaylistId(era);
+      if (list) {
+        p.loadPlaylist({ list: list, listType: "playlist", index: 0 });
+        if (p.setShuffle) p.setShuffle(true);
+        if (p.setLoop) p.setLoop(true);
+        return;
+      }
+      p.loadVideoById(seedId(era));
+    }
+
     function shuffle(list) {
       const a = list.slice();
       for (let i = a.length - 1; i > 0; i--) {
@@ -2064,7 +2085,7 @@
         p.seekTo(0, true);
         p.playVideo();
       } catch (err) {
-        try { p.loadVideoById(seedId(era)); } catch (e2) { /* ignore */ }
+        try { loadEraAudio(p, era); } catch (e2) { /* ignore */ }
       }
     }
 
@@ -2113,7 +2134,11 @@
         preferSmall(next);
         next.unMute();
         next.setVolume(80);
-        if (mixMode[era]) {
+        if (curatedPlaylistId(era)) {
+          const list = next.getPlaylist && next.getPlaylist();
+          if (seedArmed[era] && list && list.length) next.playVideo();
+          else loadEraAudio(next, era);
+        } else if (mixMode[era]) {
           mixMode[era] = false;
           inMixMode = false;
           seedArmed[era] = false;
@@ -2125,7 +2150,7 @@
           next.playVideo();
         }
       } catch (err) {
-        try { next.loadVideoById(seedId(era)); } catch (e2) { /* ignore */ }
+        try { loadEraAudio(next, era); } catch (e2) { /* ignore */ }
       }
 
       kickPlay(gen);
@@ -2136,7 +2161,7 @@
 
     function startEraMix(era) {
       const p = players[era];
-      if (!p || era !== currentEra || mixMode[era]) return;
+      if (!p || era !== currentEra || mixMode[era] || curatedPlaylistId(era)) return;
       const mix = mixId(era);
       if (!mix) return;
       mixMode[era] = true;
@@ -2173,11 +2198,18 @@
       const host = document.createElement("div");
       host.id = "yt-" + era;
       ytDock.appendChild(host);
+      const list = curatedPlaylistId(era);
+      const vars = playerVars();
+      if (list) {
+        vars.list = list;
+        vars.listType = "playlist";
+        vars.index = 0;
+      }
       players[era] = new YT.Player(host.id, {
         width: 320,
         height: 180,
-        videoId: seedId(era),
-        playerVars: playerVars(),
+        videoId: list ? undefined : seedId(era),
+        playerVars: vars,
         events: {
           onReady: function () { onEraPlayerReady(era); },
           onStateChange: function (event) { onEraStateChange(era, event); },
@@ -2247,6 +2279,13 @@
       }
       if (state === YT.PlayerState.ENDED) {
         if (ignoreEnded || mixMode[era]) return;
+        if (curatedPlaylistId(era)) {
+          try {
+            if (playlistAtEnd()) p.playVideoAt(0);
+            else p.nextVideo();
+          } catch (err) { /* ignore */ }
+          return;
+        }
         startEraMix(era);
       }
     }
@@ -2262,7 +2301,7 @@
 
       if (code === 153) {
         lockReferrer();
-        if (errorStreak < 2) players[era].loadVideoById(seedId(era));
+        if (errorStreak < 2) loadEraAudio(players[era], era);
         else {
           trackTitle.textContent = "Playback blocked";
           trackArtist.textContent = "Serve over http:// and try Play";
@@ -2272,8 +2311,8 @@
 
       if (errorStreak < 3) {
         seedArmed[era] = false;
-        players[era].loadVideoById(seedId(era));
-      } else if (!mixMode[era]) {
+        loadEraAudio(players[era], era);
+      } else if (!mixMode[era] && !curatedPlaylistId(era)) {
         startEraMix(era);
       }
     }
@@ -2375,6 +2414,11 @@
     });
     nextBtn.addEventListener("click", function () {
       if (!player) return;
+      if (curatedPlaylistId(currentEra)) {
+        if (playlistAtEnd()) player.playVideoAt(0);
+        else player.nextVideo();
+        return;
+      }
       if (!inMixMode && playlistAtEnd()) startEraMix(currentEra);
       else player.nextVideo();
     });
