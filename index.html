@@ -470,12 +470,12 @@
       position: absolute;
       top: 50%;
       left: 50%;
-      width: 177.78%;
-      height: 100%;
+      width: 220%;
+      height: 145%;
       min-width: 100%;
       min-height: 100%;
       border: 0;
-      transform: translate(-50%, -50%);
+      transform: translate(-50%, -47%);
     }
     .tv-screen.has-yt .screen-content { opacity: 0; }
     .tv-screen.has-yt .screen-noise,
@@ -1321,10 +1321,8 @@
         seed: "br6C4U3Dyfo",
         ids: [
           "br6C4U3Dyfo",   // Lag Ja Gale — Woh Kaun Thi (1964)
-          "Nw7lcCNSYy8",   // Mere Sapno Ki Rani — Aradhana (1969)
           "2ca43nTQUL0",   // Ehsaan Tera Hoga Mujh Par — Junglee (1961)
-          "BpLyDTEw3Z4",   // Aaj Phir Jeene Ki Tamanna Hai — Guide (1965)
-          "HenA-OUyo0s"    // Roop Tera Mastana — Aradhana (1969)
+          "BpLyDTEw3Z4"    // Aaj Phir Jeene Ki Tamanna Hai — Guide (1965)
         ]
       },
       "70s": {
@@ -1411,6 +1409,7 @@
     const mixMode = {};
     const preloadParkTimers = {};
     const sessionSeeds = {};
+    const triedSeeds = { "60s": {} };
     (function pickSessionSeeds() {
       const ids = ((eraPlaylists["60s"] && eraPlaylists["60s"].ids) || []).filter(Boolean);
       if (!ids.length) return;
@@ -1749,13 +1748,20 @@
       return entry.seed || (entry.ids && entry.ids[0]) || entry.id;
     }
 
+    function markTriedSeed(era, id) {
+      if (!triedSeeds[era]) triedSeeds[era] = {};
+      if (id) triedSeeds[era][id] = true;
+    }
+
     function rerollSessionSeed(era) {
       const current = sessionSeeds[era] || seedId(era);
+      markTriedSeed(era, current);
       const ids = ((eraPlaylists[era] && eraPlaylists[era].ids) || []).filter(function (id) {
-        return id && id !== current;
+        return id && !triedSeeds[era][id];
       });
-      if (ids.length) sessionSeeds[era] = ids[Math.floor(Math.random() * ids.length)];
-      return seedId(era);
+      if (!ids.length) return "";
+      sessionSeeds[era] = ids[Math.floor(Math.random() * ids.length)];
+      return sessionSeeds[era];
     }
 
     function mixId(era) {
@@ -2111,8 +2117,12 @@
        YOUTUBE — ONE HIDDEN PLAYER PER ERA SEED
        ========================================================== */
     function lockReferrer() {
-      ytDock.querySelectorAll("iframe").forEach(function (iframe) {
-        iframe.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+      const roots = [ytDock, ytStage];
+      roots.forEach(function (root) {
+        if (!root) return;
+        root.querySelectorAll("iframe").forEach(function (iframe) {
+          iframe.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+        });
       });
     }
 
@@ -2125,10 +2135,18 @@
         rel: 0,
         playsinline: 1,
         autoplay: 0,
-        vq: "small"
+        cc_load_policy: 0,
+        iv_load_policy: 3
       };
       if (location.protocol.startsWith("http")) vars.origin = location.origin;
       return vars;
+    }
+
+    function hideCaptions(p) {
+      if (!p) return;
+      try { p.unloadModule("captions"); } catch (err) { /* ignore */ }
+      try { p.unloadModule("cc"); } catch (err) { /* ignore */ }
+      try { p.setOption("captions", "track", {}); } catch (err) { /* ignore */ }
     }
 
     function preferSmall(p) {
@@ -2148,16 +2166,22 @@
       return document.getElementById("yt-" + era);
     }
 
+    let ignoreUiPauseUntil = 0;
+
     function mountYtOnScreen(era) {
       if (!ytStage) return;
       const active = ytHostFor(era);
       Array.from(ytStage.children).forEach(function (child) {
         if (child !== active) ytDock.appendChild(child);
       });
-      if (active && active.parentNode !== ytStage) ytStage.appendChild(active);
+      if (active && active.parentNode !== ytStage) {
+        ytStage.appendChild(active);
+        ignoreUiPauseUntil = Date.now() + 1600;
+      }
       tvScreen.classList.toggle("has-yt", !!active);
       const p = (usingPlaylist[era] && playlistPlayers[era]) || players[era];
       preferVisible(p);
+      hideCaptions(p);
     }
 
     function nextPreloadEra() {
@@ -2320,6 +2344,7 @@
 
       mountYtOnScreen(era);
       kickPlay(gen);
+      if (curatedPlaylistId(era)) watchPlayStart(era);
       setTimeout(function () {
         if (gen === mediaGen) ignoreEnded = false;
       }, 800);
@@ -2418,7 +2443,10 @@
         return;
       }
 
-      setPlaying(state === YT.PlayerState.PLAYING);
+      if (player && event.target && event.target !== player) return;
+
+      if (state === YT.PlayerState.PLAYING) setPlaying(true);
+      else if (state === YT.PlayerState.PAUSED && Date.now() > ignoreUiPauseUntil) setPlaying(false);
       if (
         state === YT.PlayerState.PLAYING ||
         state === YT.PlayerState.PAUSED ||
@@ -2427,9 +2455,14 @@
       ) {
         errorStreak = 0;
         if (state === YT.PlayerState.PLAYING) {
+          if (playWatchTimer) {
+            clearTimeout(playWatchTimer);
+            playWatchTimer = null;
+          }
           ignoreEnded = false;
           seedArmed[era] = true;
-          preferSmall(p);
+          preferVisible(p);
+          hideCaptions(p);
           if (era === "now") nowHasPlayed = true;
           mountYtOnScreen(era);
           schedulePreload(era === "now" ? 1500 : 400);
@@ -2455,6 +2488,44 @@
       }
     }
 
+    let playWatchTimer = null;
+    function watchPlayStart(era) {
+      if (playWatchTimer) clearTimeout(playWatchTimer);
+      playWatchTimer = setTimeout(function () {
+        playWatchTimer = null;
+        if (era !== currentEra || !player) return;
+        try {
+          const st = player.getPlayerState();
+          if (
+            st === YT.PlayerState.PLAYING ||
+            st === YT.PlayerState.BUFFERING ||
+            st === YT.PlayerState.PAUSED
+          ) return;
+        } catch (err) { /* ignore */ }
+        skipBlockedVideo(era);
+      }, 2600);
+    }
+
+    function skipBlockedVideo(era) {
+      if (curatedPlaylistId(era) && !usingPlaylist[era]) {
+        const next = rerollSessionSeed(era);
+        if (next && players[era]) {
+          try { players[era].loadVideoById(next); } catch (err) { /* ignore */ }
+          watchPlayStart(era);
+          return;
+        }
+        switchToPlaylist(era);
+        watchPlayStart(era);
+        return;
+      }
+      if (curatedPlaylistId(era)) {
+      if (mixMode[era] || inMixMode) {
+        try { if (player) player.nextVideo(); } catch (err) { /* ignore */ }
+        return;
+      }
+      startEraMix(era);
+    }
+
     function onEraError(era, event) {
       if (era !== currentEra) {
         seedArmed[era] = false;
@@ -2464,14 +2535,18 @@
       errorStreak += 1;
       console.warn("[EraTV] player error", era, code);
 
+      if (code === 100 || code === 101 || code === 150 || code === 2) {
+        skipBlockedVideo(era);
+        return;
+      }
+
       if (code === 153) {
         lockReferrer();
         if (errorStreak < 2) {
           if (curatedPlaylistId(era) && !usingPlaylist[era]) players[era].loadVideoById(rerollSessionSeed(era));
           else loadEraAudio(players[era], era);
         } else {
-          trackTitle.textContent = "Playback blocked";
-          trackArtist.textContent = "Serve over http:// and try Play";
+          skipBlockedVideo(era);
         }
         return;
       }
@@ -2481,12 +2556,10 @@
         if (curatedPlaylistId(era) && !usingPlaylist[era]) {
           players[era].loadVideoById(rerollSessionSeed(era));
         } else {
-          loadEraAudio(players[era], era);
+          skipBlockedVideo(era);
         }
-      } else if (curatedPlaylistId(era) && !usingPlaylist[era]) {
-        switchToPlaylist(era);
-      } else if (!mixMode[era] && !curatedPlaylistId(era)) {
-        startEraMix(era);
+      } else {
+        skipBlockedVideo(era);
       }
     }
 
@@ -2553,6 +2626,9 @@
         timeCurrent.textContent = formatTime(current);
         timeDuration.textContent = formatTime(duration);
         seekFill.style.width = duration ? ((current / duration) * 100).toFixed(2) + "%" : "0%";
+        const state = player.getPlayerState && player.getPlayerState();
+        if (state === YT.PlayerState.PLAYING) setPlaying(true);
+        else if (state === YT.PlayerState.PAUSED && Date.now() > ignoreUiPauseUntil) setPlaying(false);
       } catch (err) { /* ignore */ }
     }
 
