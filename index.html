@@ -198,86 +198,128 @@
       opacity: 0.85;
     }
 
-    .share-card {
+    .share-feed {
+      position: absolute;
+      z-index: 18;
+      display: flex;
+      flex-direction: column;
+      pointer-events: none;
+    }
+    .share-feed-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      pointer-events: auto;
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 16%, #000 86%, transparent 100%);
+      mask-image: linear-gradient(to bottom, transparent 0%, #000 16%, #000 86%, transparent 100%);
+    }
+    .share-feed-track {
+      display: flex;
+      flex-direction: column;
+    }
+    .share-feed.is-looping .share-feed-track {
+      animation: share-float 36s linear infinite;
+    }
+    .share-feed-scroll:hover .share-feed-track {
+      animation-play-state: paused;
+    }
+    @keyframes share-float {
+      from { transform: translateY(0); }
+      to { transform: translateY(-50%); }
+    }
+    .share-feed-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      padding: 22px 4px;
+    }
+    .share-line {
+      max-width: 86%;
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.4;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+    }
+    .share-line.shift-0 { margin-left: 0; }
+    .share-line.shift-1 { margin-left: 16%; }
+    .share-line.shift-2 { margin-left: 6%; }
+    .share-line.shift-3 { margin-left: 22%; }
+    .share-line-name { font-weight: 700; color: rgba(255, 255, 255, 0.86); }
+    .share-line-link {
+      color: rgba(255, 255, 255, 0.86);
+      font-weight: 700;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      word-break: break-word;
+    }
+    .share-line-link:hover { color: #1ed760; }
+    .share-line-arrow {
+      display: inline-block;
+      width: 11px;
+      height: 11px;
+      margin-left: 3px;
+      vertical-align: -1px;
+    }
+    .share-line-note {
+      display: block;
+      margin-top: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      font-style: italic;
+      color: rgba(255, 255, 255, 0.58);
+    }
+
+    .share-open-btn {
       position: fixed;
-      right: 22px;
+      left: 22px;
       bottom: 22px;
       z-index: 40;
-      width: 240px;
-      padding: 10px 12px 10px;
-      border-radius: 22px;
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 800;
+      color: #04120a;
+      background: #1ed760;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+    }
+    .share-open-btn:hover { filter: brightness(1.06); }
+
+    .share-form-card {
+      position: fixed;
+      left: 22px;
+      bottom: 64px;
+      z-index: 41;
+      width: 260px;
+      padding: 12px 14px;
+      border-radius: 18px;
       color: #fff;
-      background: rgba(22, 16, 12, 0.38);
+      background: rgba(22, 16, 12, 0.42);
       border: 1px solid rgba(255, 255, 255, 0.22);
       box-shadow:
         0 10px 36px rgba(0, 0, 0, 0.28),
         inset 0 1px 0 rgba(255, 255, 255, 0.18);
       backdrop-filter: blur(28px) saturate(140%);
       -webkit-backdrop-filter: blur(28px) saturate(140%);
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-      transform: translateY(18px);
-      transition:
-        opacity 0.4s ease,
-        transform 0.4s ease,
-        visibility 0.4s ease,
-        width 0.32s ease,
-        padding 0.32s ease;
+      display: none;
     }
-    .share-card.is-visible {
-      opacity: 1;
-      visibility: visible;
-      pointer-events: auto;
-      transform: translateY(0);
-    }
-    .share-card.is-open {
-      width: 260px;
-      padding: 12px 14px;
-    }
-    .share-card-title {
-      font-size: 13px;
-      font-weight: 700;
-      line-height: 1.35;
-      letter-spacing: 0.01em;
-      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
-      margin-bottom: 8px;
-    }
-    .share-card.is-open .share-card-title {
-      margin-bottom: 10px;
-    }
-    .share-card-fields {
+    .share-form-card.is-open { display: block; }
+    .share-form-card .share-form {
       display: flex;
       flex-direction: column;
       gap: 8px;
-      max-height: 0;
-      margin: 0;
-      opacity: 0;
-      overflow: hidden;
-      transform: translateY(-6px);
-      pointer-events: none;
-      transition:
-        max-height 0.32s ease,
-        opacity 0.28s ease,
-        margin 0.28s ease,
-        transform 0.28s ease;
     }
-    .share-card.is-open .share-card-fields {
-      max-height: 140px;
-      margin-bottom: 8px;
-      opacity: 1;
-      transform: translateY(0);
-      pointer-events: auto;
+    .share-form-title {
+      margin: 0 0 2px;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
     }
-    .share-card-form {
-      display: flex;
-      flex-direction: column;
-      gap: 0;
-    }
-    .share-card.is-open .share-card-form {
-      gap: 8px;
-    }
-    .share-card-input {
+    .share-form-input {
       width: 100%;
       appearance: none;
       border: 1px solid rgba(255, 255, 255, 0.2);
@@ -289,17 +331,13 @@
       background: rgba(0, 0, 0, 0.28);
       outline: none;
     }
-    .share-card-input::placeholder {
-      color: rgba(255, 255, 255, 0.45);
-    }
-    .share-card-input:focus {
-      border-color: rgba(30, 215, 96, 0.7);
-    }
-    .share-card-submit {
+    .share-form-input::placeholder { color: rgba(255, 255, 255, 0.45); }
+    .share-form-input:focus { border-color: rgba(30, 215, 96, 0.7); }
+    .share-form-submit {
       appearance: none;
       border: 0;
       border-radius: 999px;
-      padding: 6px 12px;
+      padding: 7px 12px;
       font-family: inherit;
       font-size: 12px;
       font-weight: 800;
@@ -307,25 +345,13 @@
       background: #1ed760;
       cursor: pointer;
     }
-    .share-card-submit:hover:not(:disabled) {
-      filter: brightness(1.06);
-    }
-    .share-card-submit:disabled {
-      opacity: 0.55;
-      cursor: wait;
-    }
-    .share-card-status {
-      min-height: 0;
-      margin-top: 0;
+    .share-form-status {
       font-size: 11px;
       font-weight: 600;
       color: rgba(255, 255, 255, 0.78);
     }
-    .share-card-status:not(:empty) {
-      margin-top: 6px;
-    }
-    .share-card-status.is-ok { color: #1ed760; }
-    .share-card-status.is-err { color: #ffb4b4; }
+    .share-form-status.is-ok { color: #1ed760; }
+    .share-form-status.is-err { color: #ffb4b4; }
 
     /* ============================================================
        6. FILE WARNING
@@ -957,10 +983,8 @@
         gap: 6px;
       }
       .spotify-pill-text { font-size: 11px; }
-      .share-card {
-        width: min(240px, calc(100vw - 24px));
-      }
-      .share-card.is-open { width: min(260px, calc(100vw - 24px)); }
+      .share-open-btn { left: 12px; }
+      .share-form-card { left: 12px; width: min(260px, calc(100vw - 24px)); }
     }
 
     body.is-phone .tv-img {
@@ -1004,6 +1028,27 @@
       gap: 8px;
     }
     body.is-phone .art { width: 40px; height: 40px; }
+    body.is-phone .share-line { font-size: 12px; max-width: 92%; }
+    body.is-phone .share-line.shift-1 { margin-left: 10%; }
+    body.is-phone .share-line.shift-2 { margin-left: 4%; }
+    body.is-phone .share-line.shift-3 { margin-left: 14%; }
+    body.is-phone .share-line-note { font-size: 11px; }
+    body.is-phone .share-feed-scroll {
+      -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
+      mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
+    }
+    body.is-phone .share-feed-inner {
+      gap: 18px;
+      padding: 14px 2px;
+    }
+    body.is-phone .share-feed.is-looping .share-feed-track {
+      animation-duration: 28s;
+    }
+    body.is-phone .share-open-btn { left: 10px; }
+    body.is-phone .share-form-card {
+      left: 10px;
+      width: min(260px, calc(100vw - 20px));
+    }
 
     /* ============================================================
        13. PAGE LOAD ANIMATION
@@ -1090,6 +1135,15 @@
 
     </div>
 
+    <aside class="share-feed" id="shareFeed" aria-label="Shared playlists">
+      <div class="share-feed-scroll" id="shareFeedScroll">
+        <div class="share-feed-track" id="shareFeedTrack">
+          <div class="share-feed-inner" id="shareFeedInner"></div>
+          <div class="share-feed-inner" id="shareFeedClone" aria-hidden="true"></div>
+        </div>
+      </div>
+    </aside>
+
     <div class="bottom-chrome" id="bottomChrome">
       <nav class="era-menu" id="remoteArea" aria-label="Travel to an era">
         <div class="era-menu-top">
@@ -1135,31 +1189,41 @@
 
   </div>
 
-  <aside class="share-card" id="shareCard">
-    <p class="share-card-title">wanna play your spotify playlist on ERA TV?</p>
-    <form class="share-card-form" id="shareForm">
-      <div class="share-card-fields" id="shareFields">
-        <input
-          class="share-card-input"
-          id="shareName"
-          type="text"
-          name="name"
-          placeholder="Your name"
-          maxlength="80"
-          autocomplete="name"
-        />
-        <input
-          class="share-card-input"
-          id="shareInput"
-          type="url"
-          name="playlist"
-          placeholder="Paste Spotify playlist link"
-          autocomplete="off"
-        />
-      </div>
-      <button class="share-card-submit" id="shareSubmit" type="submit">Submit</button>
+  <button type="button" class="share-open-btn" id="shareOpenBtn">Share your playlist</button>
+  <aside class="share-form-card" id="shareFormCard">
+    <form class="share-form" id="shareForm">
+      <p class="share-form-title">Share your playlist</p>
+      <input
+        class="share-form-input"
+        id="shareName"
+        type="text"
+        name="name"
+        placeholder="Your name"
+        maxlength="80"
+        autocomplete="name"
+        required
+      />
+      <input
+        class="share-form-input"
+        id="shareInput"
+        type="url"
+        name="playlist"
+        placeholder="Paste Spotify playlist link"
+        autocomplete="off"
+        required
+      />
+      <input
+        class="share-form-input"
+        id="shareMessage"
+        type="text"
+        name="message"
+        placeholder="A short note (optional)"
+        maxlength="48"
+        autocomplete="off"
+      />
+      <button class="share-form-submit" id="shareSubmit" type="submit">Share</button>
+      <p class="share-form-status" id="shareStatus"></p>
     </form>
-    <p class="share-card-status" id="shareStatus"></p>
   </aside>
 
   <!-- ============ SCRIPT ============ -->
@@ -1304,11 +1368,18 @@
     const remoteBtns    = document.getElementById("remoteBtns");
     const spotifyPill   = document.getElementById("spotifyPill");
     const spotifyPillText = document.getElementById("spotifyPillText");
-    const shareCard     = document.getElementById("shareCard");
+    const shareFeed     = document.getElementById("shareFeed");
+    const shareFeedScroll = document.getElementById("shareFeedScroll");
+    const shareFeedTrack = document.getElementById("shareFeedTrack");
+    const shareFeedInner = document.getElementById("shareFeedInner");
+    const shareFeedClone = document.getElementById("shareFeedClone");
+    const shareOpenBtn  = document.getElementById("shareOpenBtn");
+    const shareFormCard = document.getElementById("shareFormCard");
     const bottomChrome  = document.getElementById("bottomChrome");
     const shareForm     = document.getElementById("shareForm");
     const shareInput    = document.getElementById("shareInput");
     const shareName     = document.getElementById("shareName");
+    const shareMessage  = document.getElementById("shareMessage");
     const shareSubmit   = document.getElementById("shareSubmit");
     const shareStatus   = document.getElementById("shareStatus");
     const onlineCount   = document.getElementById("onlineCount");
@@ -1490,21 +1561,57 @@
       positionScreen();
     }
 
-    function positionShareCard() {
-      if (window.innerWidth > 1100) {
-        shareCard.style.bottom = "";
-        shareCard.style.right = "";
+    function positionShareFeed() {
+      if (!shareFeed || !tvScreen.offsetWidth) return;
+      const scene = document.getElementById("scene");
+      const sceneRect = scene.getBoundingClientRect();
+      const tv = tvScreen.getBoundingClientRect();
+      const tvLeft = tv.left - sceneRect.left;
+      const tvTop = tv.top - sceneRect.top;
+      const tvH = tv.height;
+
+      if (isPhoneLayout()) {
+        const top = 46;
+        const gap = 10;
+        shareFeed.style.left = "12px";
+        shareFeed.style.right = "12px";
+        shareFeed.style.width = "auto";
+        shareFeed.style.top = top + "px";
+        shareFeed.style.height = Math.max(64, tvTop - top - gap) + "px";
+        return;
+      }
+
+      const left = 28;
+      const gap = 28;
+      shareFeed.style.left = left + "px";
+      shareFeed.style.right = "auto";
+      shareFeed.style.width = Math.max(160, Math.min(340, tvLeft - left - gap)) + "px";
+      shareFeed.style.top = tvTop + "px";
+      shareFeed.style.height = tvH + "px";
+    }
+
+    function positionShareChrome() {
+      const liftNeeded = isPhoneLayout() || window.innerWidth <= 1100;
+      if (!liftNeeded) {
+        shareOpenBtn.style.bottom = "";
+        shareOpenBtn.style.left = "";
+        shareFormCard.style.bottom = "";
+        shareFormCard.style.left = "";
         return;
       }
       const chromeTop = bottomChrome.getBoundingClientRect().top;
       const lift = Math.max(12, window.innerHeight - chromeTop + 10);
-      shareCard.style.bottom = lift + "px";
-      shareCard.style.right = (window.innerWidth <= 480 ? 10 : 14) + "px";
+      const left = (isPhoneLayout() || window.innerWidth <= 480) ? 10 : 22;
+      shareOpenBtn.style.left = left + "px";
+      shareOpenBtn.style.bottom = lift + "px";
+      shareFormCard.style.left = left + "px";
+      shareFormCard.style.bottom = (lift + shareOpenBtn.offsetHeight + 10) + "px";
     }
 
     function relayout() {
       syncBackground();
-      positionShareCard();
+      positionShareFeed();
+      positionShareChrome();
     }
 
     tvImg.addEventListener("load", relayout);
@@ -2230,10 +2337,23 @@
 
     startListeningPresence();
 
+    const seenShareIds = new Set();
+    const shareRows = [];
+    const SHARE_NOTE_MAX = 48;
+    const SHARE_ARROW = '<svg class="share-line-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg>';
+
     function setShareStatus(message, kind) {
       shareStatus.textContent = message || "";
       shareStatus.classList.toggle("is-ok", kind === "ok");
       shareStatus.classList.toggle("is-err", kind === "err");
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
     }
 
     function normalizePlaylistUrl(raw) {
@@ -2244,29 +2364,82 @@
       return "https://open.spotify.com/playlist/" + match[1];
     }
 
-    function closeShareCard() {
-      if (!shareCard.classList.contains("is-open")) return;
-      shareCard.classList.remove("is-open");
-      setShareStatus("");
-      positionShareCard();
+    function makeShareLine(row, index) {
+      const line = document.createElement("div");
+      line.className = "share-line shift-" + (index % 4);
+      const note = String(row.message || "").trim();
+      line.innerHTML =
+        '<span class="share-line-name">' + escapeHtml(row.name || "Someone") + "</span>" +
+        " shared a spotify playlist " +
+        '<a class="share-line-link" href="' + escapeHtml(row.playlist_url) + '" target="_blank" rel="noopener noreferrer">' +
+        escapeHtml(row.playlist_name || "playlist") +
+        SHARE_ARROW +
+        "</a>" +
+        (note ? '<span class="share-line-note">“' + escapeHtml(note) + '”</span>' : "");
+      return line;
     }
 
+    function renderShareFeed() {
+      shareFeedInner.innerHTML = "";
+      shareFeedClone.innerHTML = "";
+      shareRows.forEach(function (row, index) {
+        shareFeedInner.appendChild(makeShareLine(row, index));
+        shareFeedClone.appendChild(makeShareLine(row, index));
+      });
+      const count = shareRows.length;
+      shareFeed.classList.toggle("is-looping", count > 0);
+      shareFeedTrack.style.animationDuration = Math.max(22, count * 8) + "s";
+    }
+
+    function appendShareLine(row) {
+      if (!row || !row.playlist_url) return;
+      const id = row.id || (row.name + "|" + row.playlist_url + "|" + (row.created_at || ""));
+      if (seenShareIds.has(id)) return;
+      seenShareIds.add(id);
+      shareRows.push(row);
+      renderShareFeed();
+    }
+
+    async function fetchPlaylistName(url) {
+      try {
+        const res = await fetch("https://open.spotify.com/oembed?url=" + encodeURIComponent(url));
+        if (!res.ok) return "";
+        const data = await res.json();
+        return String(data.title || "").trim();
+      } catch (err) {
+        return "";
+      }
+    }
+
+    function closeShareForm() {
+      if (!shareFormCard.classList.contains("is-open")) return;
+      shareFormCard.classList.remove("is-open");
+      setShareStatus("");
+    }
+
+    function openShareForm() {
+      shareFormCard.classList.add("is-open");
+      setShareStatus("");
+      positionShareChrome();
+      setTimeout(function () { shareName.focus(); }, 50);
+    }
+
+    shareOpenBtn.addEventListener("click", function () {
+      if (shareFormCard.classList.contains("is-open")) closeShareForm();
+      else openShareForm();
+    });
+
     document.addEventListener("pointerdown", function (event) {
-      if (!shareCard.classList.contains("is-open")) return;
-      if (shareCard.contains(event.target)) return;
-      closeShareCard();
+      if (!shareFormCard.classList.contains("is-open")) return;
+      if (shareFormCard.contains(event.target) || shareOpenBtn.contains(event.target)) return;
+      closeShareForm();
     });
 
     shareForm.addEventListener("submit", async function (event) {
       event.preventDefault();
-      if (!shareCard.classList.contains("is-open")) {
-        shareCard.classList.add("is-open");
-        positionShareCard();
-        setTimeout(function () { shareName.focus(); }, 80);
-        return;
-      }
       const name = String(shareName.value || "").trim();
       const playlistUrl = normalizePlaylistUrl(shareInput.value);
+      const note = String(shareMessage.value || "").trim().slice(0, SHARE_NOTE_MAX);
       if (!name) {
         setShareStatus("Tell us your name.", "err");
         return;
@@ -2282,29 +2455,81 @@
 
       shareSubmit.disabled = true;
       setShareStatus("Saving…");
-      const { error } = await supabaseClient.from("shared_playlists").insert({
+      const playlistName = await fetchPlaylistName(playlistUrl);
+      const payload = {
         name: name,
         playlist_url: playlistUrl,
+        playlist_name: playlistName || null,
+        message: note || null,
         era: currentEra
-      });
+      };
+      let result = await supabaseClient.from("shared_playlists").insert(payload).select("id, name, playlist_url, playlist_name, message, created_at").single();
+      if (result.error && /playlist_name|message/i.test(result.error.message || "")) {
+        delete payload.playlist_name;
+        delete payload.message;
+        result = await supabaseClient.from("shared_playlists").insert({
+          name: payload.name,
+          playlist_url: payload.playlist_url,
+          era: payload.era
+        }).select("id, name, playlist_url, created_at").single();
+        if (result.data) {
+          result.data.playlist_name = playlistName;
+          result.data.message = note;
+        }
+      }
       shareSubmit.disabled = false;
 
-      if (error) {
-        console.warn("[EraTV] share failed", error);
-        setShareStatus(error.message || "Could not save. Check Supabase setup.", "err");
+      if (result.error) {
+        console.warn("[EraTV] share failed", result.error);
+        setShareStatus(result.error.message || "Could not save. Check Supabase setup.", "err");
         return;
       }
 
+      appendShareLine(result.data || payload);
       shareName.value = "";
       shareInput.value = "";
-      shareCard.classList.remove("is-open");
-      setShareStatus("Thanks — saved for review.", "ok");
+      shareMessage.value = "";
+      closeShareForm();
     });
 
-    setTimeout(function () {
-      shareCard.classList.add("is-visible");
-      positionShareCard();
-    }, 5000);
+    async function loadSharedPlaylists() {
+      if (!supabaseClient) return;
+      let query = await supabaseClient
+        .from("shared_playlists")
+        .select("id, name, playlist_url, playlist_name, message, created_at")
+        .order("created_at", { ascending: true })
+        .limit(80);
+      if (query.error && /playlist_name|message/i.test(query.error.message || "")) {
+        query = await supabaseClient
+          .from("shared_playlists")
+          .select("id, name, playlist_url, created_at")
+          .order("created_at", { ascending: true })
+          .limit(80);
+      }
+      if (query.error) {
+        console.warn("[EraTV] could not load shared playlists", query.error);
+        return;
+      }
+      const rows = query.data || [];
+      if (rows.length) {
+        seenShareIds.clear();
+        shareRows.length = 0;
+        rows.forEach(appendShareLine);
+      }
+    }
+
+    function startSharedPlaylistFeed() {
+      loadSharedPlaylists();
+      if (!supabaseClient) return;
+      supabaseClient
+        .channel("shared-playlists")
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "shared_playlists" }, function (payload) {
+          appendShareLine(payload.new);
+        })
+        .subscribe();
+    }
+
+    startSharedPlaylistFeed();
 
     const tag = document.createElement("script");
     tag.src = "https://www.youtube.com/iframe_api";
