@@ -1384,13 +1384,15 @@
     const mixMode = {};
     const preloadParkTimers = {};
     const sessionSeeds = {};
+    const sessionQueues = {};
     const triedSeeds = {};
-    (function pickSessionSeeds() {
-      Object.keys(eraYtPlaylists).forEach(function (era) {
+    (function pickSessionQueues() {
+      Object.keys(eraPlaylists).forEach(function (era) {
         const ids = ((eraPlaylists[era] && eraPlaylists[era].ids) || []).filter(Boolean);
         if (!ids.length) return;
         triedSeeds[era] = {};
-        sessionSeeds[era] = ids[Math.floor(Math.random() * ids.length)];
+        sessionQueues[era] = shuffle(ids.slice());
+        sessionSeeds[era] = sessionQueues[era][0];
       });
     })();
     let player      = null;
@@ -1906,10 +1908,10 @@
     }
 
     function eraQueue(era) {
+      if (sessionQueues[era] && sessionQueues[era].length) return sessionQueues[era].slice();
       const entry = eraPlaylists[era] || {};
-      const seed = seedId(era);
-      const rest = (entry.ids || []).filter(function (id) { return id && id !== seed; });
-      return seed ? [seed].concat(shuffle(rest)) : shuffle(rest);
+      const ids = (entry.ids || []).filter(Boolean);
+      return shuffle(ids);
     }
 
     function eraObj(id) {
@@ -2583,7 +2585,13 @@
       player = p;
       mountYtOnScreen(era);
       try {
-        if (curatedPlaylistId(era) && !usingPlaylist[era] && dir > 0 && playlistIsReady(era)) {
+        if (
+          curatedPlaylistId(era) &&
+          !usingPlaylist[era] &&
+          dir > 0 &&
+          playlistAtEnd() &&
+          playlistIsReady(era)
+        ) {
           switchToPlaylist(era);
           playNow(p);
           return;
@@ -2743,9 +2751,17 @@
         coverScreen();
         if (ignoreEnded) return;
         if (curatedPlaylistId(era)) {
-          if (!usingPlaylist[era] && playlistIsReady(era)) {
-            switchToPlaylist(era);
-            playNow(p);
+          if (!usingPlaylist[era]) {
+            if (playlistAtEnd() && playlistIsReady(era)) {
+              switchToPlaylist(era);
+              playNow(p);
+              return;
+            }
+            try {
+              if (playlistAtEnd()) p.playVideoAt(0);
+              else p.nextVideo();
+              playNow(p);
+            } catch (err) { /* ignore */ }
             return;
           }
           try {
