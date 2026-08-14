@@ -550,11 +550,6 @@
       background: transparent;
       transition: opacity 1s ease, background 1s ease;
     }
-    .tv-screen.is-static .yt-stage,
-    .tv-screen.is-static .screen-video {
-      opacity: 0;
-      visibility: hidden;
-    }
 
     /* CRT glass — between video and the TV PNG, clipped to the hole */
     .screen-fx {
@@ -1837,6 +1832,9 @@
             try {
               p.mute();
               p.setVolume(0);
+              if (p.cuePlaylist) {
+                p.cuePlaylist({ list: list, listType: "playlist", index: 0 });
+              }
               if (p.setShuffle) p.setShuffle(true);
               if (p.setLoop) p.setLoop(true);
             } catch (err) { /* ignore */ }
@@ -1854,7 +1852,13 @@
             onEraStateChange(era, event);
           },
           onError: function () {
-            playlistReady[era] = false;
+            try {
+              const p = playlistPlayers[era];
+              if (p && p.cuePlaylist) {
+                p.cuePlaylist({ list: curatedPlaylistId(era), listType: "playlist", index: 0 });
+                playlistReady[era] = true;
+              }
+            } catch (err) { /* ignore */ }
           }
         }
       });
@@ -2317,7 +2321,7 @@
         clearTimeout(preloadTimer);
         preloadTimer = null;
       }
-      if (currentEra === "now" && !nowHasPlayed) return;
+      if (awaitingFirstPlay) return;
       const era = nextPreloadEra();
       if (!era) return;
       if (!players[era]) {
@@ -2424,7 +2428,6 @@
           const state = player.getPlayerState();
           if (state === YT.PlayerState.PLAYING) {
             forceUnmute(player);
-            try { player.playVideo(); } catch (err) { /* ignore */ }
             if (tries >= 10) return;
           } else {
             startCurrentPlayback(player);
@@ -2453,6 +2456,8 @@
       loadedEra = era;
       inMixMode = !!mixMode[era];
       player = next;
+      duration = 0;
+      metaVideoId = "";
       console.log("[EraTV] activate", era, { armed: !!seedArmed[era], mix: !!mixMode[era] });
 
       pauseOtherPlayers(era);
@@ -2519,12 +2524,50 @@
     function playlistAtEnd() {
       try {
         const list = player && player.getPlaylist && player.getPlaylist();
-        if (!list || !list.length) return true;
+        if (!list || !list.length) return false;
         const idx = player.getPlaylistIndex();
         return idx >= list.length - 1;
       } catch (err) {
         return false;
       }
+    }
+
+    function skipAdjacent(dir) {
+      unlockAudio();
+      userPaused = false;
+      songRevealStarted = false;
+      coverScreen();
+      const era = currentEra;
+      if (!player) return;
+      try {
+        if (curatedPlaylistId(era)) {
+          if (!usingPlaylist[era]) {
+            switchToPlaylist(era);
+            return;
+          }
+          const list = player.getPlaylist && player.getPlaylist();
+          if (!list || !list.length) {
+            player.loadPlaylist({
+              list: curatedPlaylistId(era),
+              listType: "playlist",
+              index: dir > 0 ? 1 : 0
+            });
+          } else if (dir > 0) {
+            if (playlistAtEnd()) player.playVideoAt(0);
+            else player.nextVideo();
+          } else {
+            player.previousVideo();
+          }
+        } else if (!inMixMode && dir > 0 && playlistAtEnd()) {
+          startEraMix(era);
+        } else if (dir > 0) {
+          player.nextVideo();
+        } else if (player.previousVideo) {
+          player.previousVideo();
+        }
+        playWithPolicy(player);
+      } catch (err) { /* ignore */ }
+      kickPlay(++mediaGen);
     }
 
     function createEraPlayer(era) {
@@ -2604,7 +2647,7 @@
 
       if (player && event.target && event.target !== player) return;
 
-      if (state === YT.PlayerState.PLAYING) {
+      if (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING) {
         userPaused = false;
         setPlaying(true);
       } else if (state === YT.PlayerState.PAUSED && userPaused) {
@@ -2618,7 +2661,7 @@
         state === YT.PlayerState.CUED
       ) {
         errorStreak = 0;
-        if (state === YT.PlayerState.PLAYING) {
+        if (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING) {
           if (playWatchTimer) {
             clearTimeout(playWatchTimer);
             playWatchTimer = null;
@@ -2630,7 +2673,7 @@
           if (era === "now") nowHasPlayed = true;
           mountYtOnScreen(era);
           forceUnmute(p);
-          beginSongReveal();
+          if (state === YT.PlayerState.PLAYING) beginSongReveal();
           schedulePreload(era === "now" ? 1500 : 400);
           if (curatedPlaylistId(era) && !usingPlaylist[era]) createPlaylistPlayer(era);
         }
@@ -2797,26 +2840,33 @@
       art.innerHTML = '<img alt="" src="https://i.ytimg.com/vi/' + videoId + '/hqdefault.jpg" />';
     }
 
+    let metaVideoId = "";
     function syncMeta() {
       if (!player || !player.getVideoData) return;
       try {
         const data = player.getVideoData() || {};
+        if (data.video_id && data.video_id !== metaVideoId) {
+          metaVideoId = data.video_id;
+          duration = 0;
+        }
         const parsed = parseMeta(data);
         if (parsed) {
           trackTitle.textContent = parsed.title;
           trackArtist.textContent = parsed.artist;
         }
         if (data.video_id) setArtwork(data.video_id);
-        duration = player.getDuration() || duration;
-        const current = player.getCurrentTime() || 0;
-        timeCurrent.textContent = formatTime(current);
+        const d = player.getDuration();
+        if (d && d > 1) duration = d;
+        const current = player.getCurrentTime();
+        const t = Number.isFinite(current) ? current : 0;
+        timeCurrent.textContent = formatTime(t);
         timeDuration.textContent = formatTime(duration);
-        seekFill.style.width = duration ? ((current / duration) * 100).toFixed(2) + "%" : "0%";
+        seekFill.style.width = duration ? ((t / duration) * 100).toFixed(2) + "%" : "0%";
         const state = player.getPlayerState && player.getPlayerState();
-        if (state === YT.PlayerState.PLAYING) {
+        if (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING) {
           setPlaying(true);
           if (audioUnlocked) forceUnmute(player);
-          if (!userPaused && !songRevealStarted) beginSongReveal();
+          if (!userPaused && state === YT.PlayerState.PLAYING && !songRevealStarted) beginSongReveal();
         } else if (state === YT.PlayerState.PAUSED && userPaused) {
           setPlaying(false);
           coverScreen();
@@ -2867,25 +2917,10 @@
     });
 
     prevBtn.addEventListener("click", function () {
-      unlockAudio();
-      coverScreen();
-      if (player && player.previousVideo) player.previousVideo();
+      skipAdjacent(-1);
     });
     nextBtn.addEventListener("click", function () {
-      if (!player) return;
-      unlockAudio();
-      coverScreen();
-      if (curatedPlaylistId(currentEra)) {
-        if (!usingPlaylist[currentEra]) {
-          switchToPlaylist(currentEra);
-          return;
-        }
-        if (playlistAtEnd()) player.playVideoAt(0);
-        else player.nextVideo();
-        return;
-      }
-      if (!inMixMode && playlistAtEnd()) startEraMix(currentEra);
-      else player.nextVideo();
+      skipAdjacent(1);
     });
 
     seekBtn.addEventListener("click", (event) => {
