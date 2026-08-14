@@ -1300,7 +1300,7 @@
       { id: "now",   label: "Now",   tagline: "", screenClass: "era-now" }
     ];
 
-    /* Real YouTube playlists. Seed starts first; playlist takes over on next/end. */
+    /* Real YouTube playlists. A seed from the list plays first while the playlist cues. */
     const eraYtPlaylists = {
       "60s":   "PL9528B4412EC7A3A4",
       "70s":   "PLgCV-sHZhmPJPm-4DPbNwC3UdonuURgcW",
@@ -1311,62 +1311,36 @@
       "now":   "PLO7-VO1D0_6MnOoKQGmYNY2OoCOP3GRfm"
     };
 
-    /* One seed song per era, then a shuffled same-era Bollywood pool.
-       After the curated pool, YouTube Mix (RD + seed) continues the station. */
+    /* Five videos taken from each era playlist. These start immediately as a fallback
+       while the full YouTube playlist loads in the background. */
     const eraPlaylists = {
       "60s": {
-        seed: "br6C4U3Dyfo",
-        ids: [
-          "br6C4U3Dyfo",   // Lag Ja Gale — Woh Kaun Thi (1964)
-          "Nw7lcCNSYy8",   // Mere Sapno Ki Rani — Aradhana (1969)
-          "2ca43nTQUL0",   // Ehsaan Tera Hoga Mujh Par — Junglee (1961)
-          "BpLyDTEw3Z4"    // Aaj Phir Jeene Ki Tamanna Hai — Guide (1965)
-        ]
+        seed: "OnBJLHyQxxs",
+        ids: ["OnBJLHyQxxs", "DMkwkis7n58", "OiggiiL_4do", "szFxM9KBNMA", "S0WPSYFm7iE"]
       },
       "70s": {
-        seed: "XuCp0r3vhPQ",
-        ids: [
-          "XuCp0r3vhPQ",   // Chura Liya Hai Tumne — Yaadon Ki Baaraat (1973)
-          "qfCt1UZAXMQ"    // Yeh Dosti — Sholay (1975)
-        ]
+        seed: "_NIFoqfSO6E",
+        ids: ["_NIFoqfSO6E", "v13cUeX6_co", "zdfKb5njqtU", "W-Hjah2Ir3w", "8ZctD4a5dvo"]
       },
       "80s": {
-        seed: "FEvBiayarlc",
-        ids: [
-          "FEvBiayarlc",   // Papa Kehte Hain — QSQT (1988)
-          "vdgwvgYdQT8"    // Hawa Hawai — Mr. India (1987)
-        ]
+        seed: "KSuHOgDiq6Y",
+        ids: ["KSuHOgDiq6Y", "BOLYNw3x1lE", "0AwkZihdw6E", "eNoK5t2ckm0", "3_tZ7GK18dY"]
       },
       "90s": {
-        seed: "cNV5hLSa9H8",
-        ids: [
-          "cNV5hLSa9H8",   // Tujhe Dekha Toh — DDLJ (1995)
-          "Ki41AKu0iHc"    // Pehla Nasha — Jo Jeeta Wohi Sikandar (1992)
-        ]
+        seed: "Xi6BjmipH58",
+        ids: ["Xi6BjmipH58", "caEfgyFv4SM", "8mweiZlvxsE", "0tjVtYtZ384", "U0qBRoeQa-g"]
       },
       "2000s": {
-        seed: "g0eO74UmRBs",
-        ids: [
-          "g0eO74UmRBs",   // Kal Ho Naa Ho (2003)
-          "4dsFQFCvVGU",   // Kajra Re — Bunty Aur Babli (2005)
-          "2uUmHTgT65I"    // Dhoom Machale — Dhoom (2004)
-        ]
+        seed: "OUhrP5XtU_4",
+        ids: ["OUhrP5XtU_4", "KayWQCbGirU", "ZiJgkQLunUM", "EkZGKGolYlI", "Lrh3kJoGYX0"]
       },
       "2010s": {
-        seed: "WWZxDA81JFk",
-        ids: [
-          "WWZxDA81JFk",   // Tum Hi Ho — Aashiqui 2 (2013)
-          "284Ov7ysmfA"    // Channa Mereya — ADHM (2016)
-        ]
+        seed: "TenVw8ojifY",
+        ids: ["TenVw8ojifY", "tTqaMRea9GM", "AWjQgUDfZG0", "rTuxUAuJRyY", "P8PWN1OmZOA"]
       },
       "now": {
-        seed: "VAdGW7QDJiU",
-        ids: [
-          "VAdGW7QDJiU",   // Chaleya — Jawan (2023)
-          "BddP6PYo2gs",   // Kesariya — Brahmastra (2022)
-          "YxWlaYCA8MU",   // Jhoome Jo Pathaan (2023)
-          "u2NAuswnTKs"    // Apna Bana Le — Bhediya (2022)
-        ]
+        seed: "-YlmnPh-6rE",
+        ids: ["-YlmnPh-6rE", "YyepU5ztLf4", "bP8ATWCvqzw", "GX9x62kFsVU", "OhlC5hWXk6Y"]
       }
     };
 
@@ -1814,40 +1788,43 @@
 
     function createPlaylistPlayer(era) {
       const list = curatedPlaylistId(era);
-      if (!list || playlistPlayers[era]) return;
+      if (!list || playlistPlayers[era] || playlistFailed[era]) return;
       const host = document.createElement("div");
       host.id = "yt-pl-" + era;
       ytDock.appendChild(host);
-      const vars = playerVars();
-      vars.list = list;
-      vars.listType = "playlist";
-      vars.index = 0;
       playlistPlayers[era] = new YT.Player(host.id, {
         width: 320,
         height: 180,
-        playerVars: vars,
+        videoId: seedId(era),
+        playerVars: playerVars(),
         events: {
           onReady: function () {
             const p = playlistPlayers[era];
-            playlistReady[era] = true;
             lockReferrer();
             preferSmall(p);
             try {
               p.mute();
               p.setVolume(0);
+              p.pauseVideo();
               if (p.cuePlaylist) {
                 p.cuePlaylist({ list: list, listType: "playlist", index: 0 });
               }
-              if (p.setShuffle) p.setShuffle(true);
-              if (p.setLoop) p.setLoop(true);
             } catch (err) { /* ignore */ }
           },
           onStateChange: function (event) {
+            const p = playlistPlayers[era];
             if (!usingPlaylist[era]) {
               if (event.data === YT.PlayerState.PLAYING) {
+                try { p.pauseVideo(); p.mute(); } catch (err) { /* ignore */ }
+              }
+              if (
+                event.data === YT.PlayerState.CUED ||
+                event.data === YT.PlayerState.BUFFERING ||
+                event.data === YT.PlayerState.PLAYING
+              ) {
                 try {
-                  playlistPlayers[era].pauseVideo();
-                  playlistPlayers[era].mute();
+                  const have = p && p.getPlaylist && p.getPlaylist();
+                  if (have && have.length) playlistReady[era] = true;
                 } catch (err) { /* ignore */ }
               }
               return;
@@ -1855,68 +1832,46 @@
             onEraStateChange(era, event);
           },
           onError: function () {
-            try {
-              const p = playlistPlayers[era];
-              if (p && p.cuePlaylist) {
-                p.cuePlaylist({ list: curatedPlaylistId(era), listType: "playlist", index: 0 });
-                playlistReady[era] = true;
-              }
-            } catch (err) { /* ignore */ }
+            playlistFailed[era] = true;
+            playlistReady[era] = false;
           }
         }
       });
     }
 
-    function startFallbackQueue(p, era) {
+    function playlistIsReady(era) {
+      return !!(playlistPlayers[era] && playlistReady[era] && !playlistFailed[era]);
+    }
+
+    function startSeedQueue(p, era) {
       const ids = eraQueue(era);
       if (!p || !ids.length) return false;
-      playlistFailed[era] = true;
-      usingPlaylist[era] = true;
+      usingPlaylist[era] = false;
       inMixMode = false;
       player = p;
-      console.log("[EraTV] fallback queue", era, ids);
       try {
         forceUnmute(p);
-        p.loadPlaylist({ playlist: ids, index: 0 });
+        if (ids.length > 1) p.loadPlaylist({ playlist: ids, index: 0 });
+        else p.loadVideoById(ids[0]);
         if (p.setLoop) p.setLoop(true);
         playWithPolicy(p);
       } catch (err) {
-        try { p.loadVideoById(ids[0]); playWithPolicy(p); } catch (e2) { /* ignore */ }
+        try { p.loadVideoById(ids[0] || seedId(era)); playWithPolicy(p); } catch (e2) { /* ignore */ }
       }
+      createPlaylistPlayer(era);
       return true;
     }
 
-    function startCuratedPlaylist(p, era) {
-      if (playlistFailed[era]) return startFallbackQueue(p, era);
-      const list = curatedPlaylistId(era);
-      if (!p || !list) return startFallbackQueue(p, era);
-      usingPlaylist[era] = true;
-      inMixMode = false;
-      player = p;
-      try {
-        if (playlistPlayers[era] && playlistPlayers[era] !== p) {
-          playlistPlayers[era].pauseVideo();
-          playlistPlayers[era].mute();
-        }
-        forceUnmute(p);
-        const have = p.getPlaylist && p.getPlaylist();
-        if (!have || !have.length) {
-          p.loadPlaylist({ list: list, listType: "playlist", index: 0 });
-        } else {
-          try { p.playVideoAt(0); } catch (err2) { p.playVideo(); }
-        }
-        if (p.setShuffle) p.setShuffle(true);
-        if (p.setLoop) p.setLoop(true);
-        playWithPolicy(p);
-      } catch (err) {
-        return startFallbackQueue(p, era);
-      }
-      return true;
+    function startFallbackQueue(p, era) {
+      playlistFailed[era] = true;
+      usingPlaylist[era] = false;
+      return startSeedQueue(p, era);
     }
 
     function switchToPlaylist(era) {
-      const p = players[era];
-      if (!curatedPlaylistId(era) || !p) return false;
+      if (!playlistIsReady(era)) return false;
+      const p = playlistPlayers[era];
+      if (!p) return false;
       ignoreEnded = true;
       songRevealStarted = false;
       lastProgressT = -1;
@@ -1924,9 +1879,17 @@
       setPlaying(false);
       usingPlaylist[era] = true;
       inMixMode = false;
+      if (players[era] && players[era] !== p) {
+        try { players[era].pauseVideo(); players[era].mute(); } catch (err) { /* ignore */ }
+      }
       player = p;
       mountYtOnScreen(era);
-      startCuratedPlaylist(p, era);
+      try {
+        forceUnmute(p);
+        if (p.setShuffle) p.setShuffle(true);
+        if (p.setLoop) p.setLoop(true);
+        playWithPolicy(p);
+      } catch (err) { /* ignore */ }
       coverScreen();
       kickPlay(++mediaGen);
       watchPlayStart(era);
@@ -2541,11 +2504,10 @@
       try {
         preferSmall(next);
         applyVolume(next);
-        if (curatedPlaylistId(era)) {
-          usingPlaylist[era] = true;
+        if (curatedPlaylistId(era) || (eraPlaylists[era] && eraPlaylists[era].ids)) {
           player = next;
           mountYtOnScreen(era);
-          startCuratedPlaylist(next, era);
+          startSeedQueue(next, era);
         } else if (mixMode[era]) {
           mixMode[era] = false;
           inMixMode = false;
@@ -2619,12 +2581,23 @@
       mountYtOnScreen(era);
       try {
         if (curatedPlaylistId(era)) {
-          const list = player.getPlaylist && player.getPlaylist();
-          if (!usingPlaylist[era] || !list || !list.length) {
-            switchToPlaylist(era);
-            return;
-          }
-          if (dir > 0) {
+          if (!usingPlaylist[era]) {
+            if (dir > 0 && switchToPlaylist(era)) return;
+            const list = player.getPlaylist && player.getPlaylist();
+            if (!list || !list.length) {
+              startSeedQueue(player, era);
+              playWithPolicy(player);
+              kickPlay(++mediaGen);
+              watchPlayStart(era);
+              return;
+            }
+            if (dir > 0) {
+              if (playlistAtEnd()) player.playVideoAt(0);
+              else player.nextVideo();
+            } else if (player.previousVideo) {
+              player.previousVideo();
+            }
+          } else if (dir > 0) {
             if (playlistAtEnd()) player.playVideoAt(0);
             else player.nextVideo();
           } else {
@@ -2786,7 +2759,8 @@
         if (ignoreEnded) return;
         if (curatedPlaylistId(era)) {
           if (!usingPlaylist[era]) {
-            switchToPlaylist(era);
+            if (switchToPlaylist(era)) return;
+            try { p.nextVideo(); } catch (err) { /* ignore */ }
             return;
           }
           try {
@@ -2833,20 +2807,30 @@
       lastProgressT = -1;
       lastProgressAt = Date.now();
       skipStreak[era] = (skipStreak[era] || 0) + 1;
-      player = players[era] || player;
+      player = (usingPlaylist[era] && playlistPlayers[era]) || players[era] || player;
       mountYtOnScreen(era);
-      if (!playlistFailed[era] && (skipStreak[era] >= 2 || !(player && player.getPlaylist && player.getPlaylist() && player.getPlaylist().length))) {
-        startFallbackQueue(player, era);
+      if (!usingPlaylist[era]) {
+        if (skipStreak[era] >= 2 && playlistIsReady(era)) {
+          switchToPlaylist(era);
+          return;
+        }
+        try {
+          if (player && playlistAtEnd()) player.playVideoAt(0);
+          else if (player) player.nextVideo();
+          playWithPolicy(player);
+        } catch (err) {
+          startSeedQueue(players[era] || player, era);
+        }
         kickPlay(++mediaGen);
         watchPlayStart(era);
         return;
       }
-      if (curatedPlaylistId(era) || playlistFailed[era]) {
-        usingPlaylist[era] = true;
+      if (curatedPlaylistId(era)) {
         try {
           const list = player && player.getPlaylist && player.getPlaylist();
           if (!list || !list.length) {
-            startFallbackQueue(player, era);
+            usingPlaylist[era] = false;
+            startSeedQueue(players[era] || player, era);
             kickPlay(++mediaGen);
             watchPlayStart(era);
             return;
