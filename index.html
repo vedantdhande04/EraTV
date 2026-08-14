@@ -2239,7 +2239,7 @@
         rel: 0,
         playsinline: 1,
         autoplay: 1,
-        mute: 0,
+        mute: 1,
         cc_load_policy: 0,
         iv_load_policy: 3
       };
@@ -2381,14 +2381,24 @@
       } catch (err) { /* ignore */ }
     }
 
+    function startCurrentPlayback(p) {
+      if (!p) return;
+      try {
+        if (audioUnlocked) {
+          forceUnmute(p);
+        } else {
+          p.mute();
+        }
+        p.playVideo();
+      } catch (err) { /* ignore */ }
+    }
+
     function applyVolume(p) {
-      forceUnmute(p);
+      if (audioUnlocked) forceUnmute(p);
     }
 
     function playWithPolicy(p) {
-      if (!p) return;
-      forceUnmute(p);
-      try { p.playVideo(); } catch (err) { /* ignore */ }
+      startCurrentPlayback(p);
     }
 
     function kickPlay(gen) {
@@ -2400,20 +2410,16 @@
           const state = player.getPlayerState();
           if (state === YT.PlayerState.PLAYING) {
             forceUnmute(player);
-            return;
-          }
-          if (tries < 8) {
-            forceUnmute(player);
-            player.playVideo();
+            try { player.playVideo(); } catch (err) { /* ignore */ }
+            if (tries >= 10) return;
           } else {
-            player.mute();
-            player.playVideo();
+            startCurrentPlayback(player);
           }
         } catch (err) { /* ignore */ }
         tries += 1;
-        if (tries < 14) playKickTimer = setTimeout(tick, 280);
+        if (tries < 16) playKickTimer = setTimeout(tick, 280);
       }
-      playKickTimer = setTimeout(tick, 60);
+      playKickTimer = setTimeout(tick, 40);
     }
 
     function activateEraAudio(era) {
@@ -2534,7 +2540,8 @@
       preferSmall(players[era]);
       try {
         if (era === currentEra) {
-          forceUnmute(players[era]);
+          if (audioUnlocked) forceUnmute(players[era]);
+          else players[era].mute();
         } else {
           players[era].mute();
           players[era].setVolume(0);
@@ -2593,11 +2600,13 @@
           preferVisible(p);
           hideCaptions(p);
           if (era === "now") nowHasPlayed = true;
+          mountYtOnScreen(era);
+          startCurrentPlayback(p);
           forceUnmute(p);
+          try { p.playVideo(); } catch (err) { /* ignore */ }
           try {
             if (!(p.isMuted && p.isMuted())) audioUnlocked = true;
           } catch (err) { /* ignore */ }
-          mountYtOnScreen(era);
           beginSongReveal();
           schedulePreload(era === "now" ? 1500 : 400);
           if (curatedPlaylistId(era) && !usingPlaylist[era]) createPlaylistPlayer(era);
@@ -2635,10 +2644,26 @@
             st === YT.PlayerState.PLAYING ||
             st === YT.PlayerState.BUFFERING ||
             st === YT.PlayerState.PAUSED
-          ) return;
+          ) {
+            if (st !== YT.PlayerState.PLAYING) startCurrentPlayback(player);
+            return;
+          }
+          startCurrentPlayback(player);
         } catch (err) { /* ignore */ }
-        skipBlockedVideo(era);
-      }, 2600);
+        playWatchTimer = setTimeout(function () {
+          playWatchTimer = null;
+          if (era !== currentEra || !player) return;
+          try {
+            const st = player.getPlayerState();
+            if (
+              st === YT.PlayerState.PLAYING ||
+              st === YT.PlayerState.BUFFERING ||
+              st === YT.PlayerState.PAUSED
+            ) return;
+          } catch (err2) { /* ignore */ }
+          skipBlockedVideo(era);
+        }, 2200);
+      }, 3200);
     }
 
     function skipBlockedVideo(era) {
