@@ -1203,6 +1203,7 @@
       <nav class="era-menu" id="remoteArea" aria-label="Travel to an era">
         <div class="era-menu-top">
           <span class="era-menu-kicker">Travel to…</span>
+          <span class="era-menu-cooldown" id="eraCooldown"></span>
         </div>
         <div class="era-menu-btns" id="remoteBtns"></div>
       </nav>
@@ -1386,6 +1387,7 @@
     };
 
     const DEFAULT_ERA = "now";
+    const ERA_COOLDOWN_MS = 5000;
     const PLAY_ICON  = '<path d="M8 5v14l11-7z"/>';
     const PAUSE_ICON = '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>';
     const ERA_IDS = ERAS.map(function (era) { return era.id; });
@@ -1432,6 +1434,8 @@
     let audioUnlocked = false;
     let nowHasPlayed = false;
     let preloadTimer = null;
+    let lastEraChangeAt = 0;
+    let eraCooldownTimer = 0;
     let noiseHoldTimer = null;
     let noiseFadeTimer = null;
     let coveredVideoKey = "";
@@ -1452,6 +1456,7 @@
     const eraBadge      = document.getElementById("eraBadge");
     const eraTagline    = document.getElementById("eraTagline");
     const remoteBtns    = document.getElementById("remoteBtns");
+    const eraCooldown   = document.getElementById("eraCooldown");
     const spotifyPill   = document.getElementById("spotifyPill");
     const spotifyPillText = document.getElementById("spotifyPillText");
     const shareFeed     = document.getElementById("shareFeed");
@@ -1941,6 +1946,36 @@
         btn.classList.toggle("is-active", btn.dataset.era === eraId);
       });
       updateSpotifyPill(eraId);
+      setEraButtonsLocked(cooldownRemaining() > 0);
+    }
+
+    function cooldownRemaining() {
+      if (!lastEraChangeAt) return 0;
+      return Math.max(0, ERA_COOLDOWN_MS - (Date.now() - lastEraChangeAt));
+    }
+
+    function setEraButtonsLocked(locked) {
+      remoteBtns.querySelectorAll(".era-chip").forEach(function (btn) {
+        btn.disabled = locked && btn.dataset.era !== currentEra;
+      });
+    }
+
+    function startEraCooldown() {
+      lastEraChangeAt = Date.now();
+      setEraButtonsLocked(true);
+      tickEraCooldown();
+    }
+
+    function tickEraCooldown() {
+      if (eraCooldownTimer) clearTimeout(eraCooldownTimer);
+      const left = cooldownRemaining();
+      if (eraCooldown) {
+        eraCooldown.textContent = left > 0
+          ? "wait " + Math.ceil(left / 1000) + " sec before travelling again"
+          : "";
+      }
+      setEraButtonsLocked(left > 0);
+      if (left > 0) eraCooldownTimer = setTimeout(tickEraCooldown, 200);
     }
 
     function updateSpotifyPill(eraId) {
@@ -2161,7 +2196,7 @@
         if (!playing && players[eraId]) activateEraAudio(eraId);
         return;
       }
-      const visualChange = eraId !== currentEra;
+      if (cooldownRemaining() > 0) return;
 
       currentEra = eraId;
       loadedEra = null;
@@ -2169,12 +2204,13 @@
       ignoreEnded = true;
       errorStreak = 0;
       updateRemoteActive(eraId);
+      startEraCooldown();
       trackTitle.textContent = eraObj(eraId).label + " radio";
       trackArtist.textContent = seedArmed[eraId] ? "Live" : "Tuning in…";
       setArtwork(seedId(eraId));
 
       if (eraId === "now") holdNowScreen();
-      else if (visualChange) playStaticTransition(eraId);
+      else playStaticTransition(eraId);
 
       activateEraAudio(eraId);
       trackListening();
