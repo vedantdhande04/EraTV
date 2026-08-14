@@ -1813,23 +1813,19 @@
           },
           onStateChange: function (event) {
             const p = playlistPlayers[era];
-            if (!usingPlaylist[era]) {
-              if (event.data === YT.PlayerState.PLAYING) {
-                try { p.pauseVideo(); p.mute(); } catch (err) { /* ignore */ }
-              }
-              if (
-                event.data === YT.PlayerState.CUED ||
-                event.data === YT.PlayerState.BUFFERING ||
-                event.data === YT.PlayerState.PLAYING
-              ) {
-                try {
-                  const have = p && p.getPlaylist && p.getPlaylist();
-                  if (have && have.length) playlistReady[era] = true;
-                } catch (err) { /* ignore */ }
-              }
-              return;
+            if (event.data === YT.PlayerState.PLAYING) {
+              try { p.pauseVideo(); p.mute(); } catch (err) { /* ignore */ }
             }
-            onEraStateChange(era, event);
+            if (
+              event.data === YT.PlayerState.CUED ||
+              event.data === YT.PlayerState.BUFFERING ||
+              event.data === YT.PlayerState.PLAYING
+            ) {
+              try {
+                const have = p && p.getPlaylist && p.getPlaylist();
+                if (have && have.length) playlistReady[era] = true;
+              } catch (err) { /* ignore */ }
+            }
           },
           onError: function () {
             playlistFailed[era] = true;
@@ -1869,26 +1865,27 @@
     }
 
     function switchToPlaylist(era) {
-      if (!playlistIsReady(era)) return false;
-      const p = playlistPlayers[era];
-      if (!p) return false;
+      const list = curatedPlaylistId(era);
+      const p = players[era];
+      if (!list || !p) return false;
       ignoreEnded = true;
       songRevealStarted = false;
       lastProgressT = -1;
       lastProgressAt = Date.now();
-      setPlaying(false);
       usingPlaylist[era] = true;
       inMixMode = false;
-      if (players[era] && players[era] !== p) {
-        try { players[era].pauseVideo(); players[era].mute(); } catch (err) { /* ignore */ }
-      }
       player = p;
       mountYtOnScreen(era);
       try {
+        if (playlistPlayers[era]) {
+          playlistPlayers[era].pauseVideo();
+          playlistPlayers[era].mute();
+        }
         forceUnmute(p);
+        p.loadPlaylist({ list: list, listType: "playlist", index: 0 });
         if (p.setShuffle) p.setShuffle(true);
         if (p.setLoop) p.setLoop(true);
-        playWithPolicy(p);
+        p.playVideo();
       } catch (err) { /* ignore */ }
       coverScreen();
       kickPlay(++mediaGen);
@@ -2280,7 +2277,6 @@
     }
 
     function eraPlaybackPlayer(era) {
-      if (usingPlaylist[era] && playlistPlayers[era]) return playlistPlayers[era];
       return players[era] || null;
     }
 
@@ -2288,7 +2284,7 @@
       const p = eraPlaybackPlayer(era);
       let node = null;
       try { node = p && p.getIframe && p.getIframe(); } catch (err) { /* ignore */ }
-      if (!node) node = document.getElementById("yt-pl-" + era) || document.getElementById("yt-" + era);
+      if (!node) node = document.getElementById("yt-" + era);
       if (!node) return null;
       while (node.parentNode && node.parentNode !== ytDock && node.parentNode !== ytStage) {
         node = node.parentNode;
@@ -2568,49 +2564,37 @@
       }
     }
 
+    function playNow(p) {
+      if (!p) return;
+      forceUnmute(p);
+      try { p.playVideo(); } catch (err) { /* ignore */ }
+    }
+
     function skipAdjacent(dir) {
       unlockAudio();
       userPaused = false;
       songRevealStarted = false;
       lastProgressT = -1;
       lastProgressAt = Date.now();
-      setPlaying(false);
       coverScreen();
       const era = currentEra;
-      if (!player) return;
+      const p = players[era] || player;
+      if (!p) return;
+      player = p;
       mountYtOnScreen(era);
       try {
-        if (curatedPlaylistId(era)) {
-          if (!usingPlaylist[era]) {
-            if (dir > 0 && switchToPlaylist(era)) return;
-            const list = player.getPlaylist && player.getPlaylist();
-            if (!list || !list.length) {
-              startSeedQueue(player, era);
-              playWithPolicy(player);
-              kickPlay(++mediaGen);
-              watchPlayStart(era);
-              return;
-            }
-            if (dir > 0) {
-              if (playlistAtEnd()) player.playVideoAt(0);
-              else player.nextVideo();
-            } else if (player.previousVideo) {
-              player.previousVideo();
-            }
-          } else if (dir > 0) {
-            if (playlistAtEnd()) player.playVideoAt(0);
-            else player.nextVideo();
-          } else {
-            player.previousVideo();
-          }
-        } else if (!inMixMode && dir > 0 && playlistAtEnd()) {
-          startEraMix(era);
-        } else if (dir > 0) {
-          player.nextVideo();
-        } else if (player.previousVideo) {
-          player.previousVideo();
+        if (curatedPlaylistId(era) && !usingPlaylist[era] && dir > 0 && playlistIsReady(era)) {
+          switchToPlaylist(era);
+          playNow(p);
+          return;
         }
-        playWithPolicy(player);
+        if (dir > 0) {
+          if (playlistAtEnd()) p.playVideoAt(0);
+          else p.nextVideo();
+        } else if (p.previousVideo) {
+          p.previousVideo();
+        }
+        playNow(p);
       } catch (err) { /* ignore */ }
       kickPlay(++mediaGen);
       watchPlayStart(era);
@@ -2693,7 +2677,8 @@
         return;
       }
 
-      if (event.target === players[era] || event.target === playlistPlayers[era]) {
+      if (event.target === playlistPlayers[era] && event.target !== players[era]) return;
+      if (event.target === players[era]) {
         player = event.target;
         p = player;
       } else if (player && event.target && event.target !== player) {
@@ -2758,14 +2743,15 @@
         coverScreen();
         if (ignoreEnded) return;
         if (curatedPlaylistId(era)) {
-          if (!usingPlaylist[era]) {
-            if (switchToPlaylist(era)) return;
-            try { p.nextVideo(); } catch (err) { /* ignore */ }
+          if (!usingPlaylist[era] && playlistIsReady(era)) {
+            switchToPlaylist(era);
+            playNow(p);
             return;
           }
           try {
             if (playlistAtEnd()) p.playVideoAt(0);
             else p.nextVideo();
+            playNow(p);
           } catch (err) { /* ignore */ }
           return;
         }
@@ -2807,7 +2793,7 @@
       lastProgressT = -1;
       lastProgressAt = Date.now();
       skipStreak[era] = (skipStreak[era] || 0) + 1;
-      player = (usingPlaylist[era] && playlistPlayers[era]) || players[era] || player;
+      player = players[era] || player;
       mountYtOnScreen(era);
       if (!usingPlaylist[era]) {
         if (skipStreak[era] >= 2 && playlistIsReady(era)) {
