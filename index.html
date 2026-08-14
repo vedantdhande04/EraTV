@@ -2239,7 +2239,7 @@
         rel: 0,
         playsinline: 1,
         autoplay: 1,
-        mute: 1,
+        mute: 0,
         cc_load_policy: 0,
         iv_load_policy: 3
       };
@@ -2373,21 +2373,21 @@
       }
     }
 
-    function applyVolume(p) {
+    function forceUnmute(p) {
       if (!p) return;
       try {
-        if (audioUnlocked) {
-          p.unMute();
-          p.setVolume(80);
-        } else {
-          p.mute();
-        }
+        p.unMute();
+        p.setVolume(80);
       } catch (err) { /* ignore */ }
+    }
+
+    function applyVolume(p) {
+      forceUnmute(p);
     }
 
     function playWithPolicy(p) {
       if (!p) return;
-      applyVolume(p);
+      forceUnmute(p);
       try { p.playVideo(); } catch (err) { /* ignore */ }
     }
 
@@ -2399,13 +2399,19 @@
         try {
           const state = player.getPlayerState();
           if (state === YT.PlayerState.PLAYING) {
-            applyVolume(player);
+            forceUnmute(player);
             return;
           }
-          playWithPolicy(player);
+          if (tries < 8) {
+            forceUnmute(player);
+            player.playVideo();
+          } else {
+            player.mute();
+            player.playVideo();
+          }
         } catch (err) { /* ignore */ }
         tries += 1;
-        if (tries < 12) playKickTimer = setTimeout(tick, 280);
+        if (tries < 14) playKickTimer = setTimeout(tick, 280);
       }
       playKickTimer = setTimeout(tick, 60);
     }
@@ -2527,12 +2533,11 @@
       lockReferrer();
       preferSmall(players[era]);
       try {
-        if (era === currentEra && audioUnlocked) {
-          players[era].unMute();
-          players[era].setVolume(80);
+        if (era === currentEra) {
+          forceUnmute(players[era]);
         } else {
           players[era].mute();
-          players[era].setVolume(era === currentEra ? 80 : 0);
+          players[era].setVolume(0);
         }
       } catch (err) { /* ignore */ }
 
@@ -2588,12 +2593,9 @@
           preferVisible(p);
           hideCaptions(p);
           if (era === "now") nowHasPlayed = true;
-          applyVolume(p);
+          forceUnmute(p);
           try {
-            p.unMute();
-            p.setVolume(80);
             if (!(p.isMuted && p.isMuted())) audioUnlocked = true;
-            else applyVolume(p);
           } catch (err) { /* ignore */ }
           mountYtOnScreen(era);
           beginSongReveal();
@@ -2705,12 +2707,9 @@
     }
 
     function unlockAudio() {
-      if (audioUnlocked) return;
       audioUnlocked = true;
-      if (player) {
-        applyVolume(player);
-        try { if (!playing) player.playVideo(); } catch (err) { /* ignore */ }
-      }
+      forceUnmute(player);
+      try { if (player && !playing) player.playVideo(); } catch (err) { /* ignore */ }
       schedulePreload(400);
     }
 
@@ -2765,8 +2764,10 @@
         timeDuration.textContent = formatTime(duration);
         seekFill.style.width = duration ? ((current / duration) * 100).toFixed(2) + "%" : "0%";
         const state = player.getPlayerState && player.getPlayerState();
-        if (state === YT.PlayerState.PLAYING) setPlaying(true);
-        else if (state === YT.PlayerState.PAUSED && Date.now() > ignoreUiPauseUntil) setPlaying(false);
+        if (state === YT.PlayerState.PLAYING) {
+          setPlaying(true);
+          forceUnmute(player);
+        } else if (state === YT.PlayerState.PAUSED && Date.now() > ignoreUiPauseUntil) setPlaying(false);
       } catch (err) { /* ignore */ }
     }
 
@@ -2797,11 +2798,13 @@
     });
 
     prevBtn.addEventListener("click", function () {
+      unlockAudio();
       coverScreen();
       if (player && player.previousVideo) player.previousVideo();
     });
     nextBtn.addEventListener("click", function () {
       if (!player) return;
+      unlockAudio();
       coverScreen();
       if (curatedPlaylistId(currentEra)) {
         if (!usingPlaylist[currentEra]) {
@@ -2817,7 +2820,9 @@
     });
 
     seekBtn.addEventListener("click", (event) => {
+      unlockAudio();
       if (!player || !duration) return;
+      forceUnmute(player);
       const rect = event.currentTarget.getBoundingClientRect();
       const ratio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
       player.seekTo(duration * ratio, true);
@@ -2830,7 +2835,9 @@
     holdNowScreen();
     setArtwork(seedId(DEFAULT_ERA));
     setInterval(syncMeta, 500);
-    document.addEventListener("pointerdown", unlockAudio, { once: true });
+    ["pointerdown", "keydown", "touchstart"].forEach(function (type) {
+      document.addEventListener(type, unlockAudio, true);
+    });
 
     const supabaseCfg = window.ERA_TV_SUPABASE || {};
     const supabaseClient = (window.supabase && supabaseCfg.url && supabaseCfg.anonKey)
