@@ -1864,42 +1864,47 @@
       });
     }
 
-    function switchToPlaylist(era) {
-      if (!curatedPlaylistId(era)) return false;
-      const ready = playlistPlayers[era] && playlistReady[era];
-      ignoreEnded = true;
-      if (!ready) {
-        const p = players[era];
-        if (!p) return false;
-        usingPlaylist[era] = true;
-        inMixMode = true;
-        player = p;
-        try {
-          p.loadPlaylist({ list: curatedPlaylistId(era), listType: "playlist", index: 0 });
-          if (p.setShuffle) p.setShuffle(true);
-          if (p.setLoop) p.setLoop(true);
-          playWithPolicy(p);
-        } catch (err) { /* ignore */ }
-        coverScreen();
-        kickPlay(++mediaGen);
-        setTimeout(function () { ignoreEnded = false; }, 800);
-        return true;
-      }
-      if (players[era] && players[era] !== playlistPlayers[era]) {
-        try { players[era].pauseVideo(); players[era].mute(); } catch (err) { /* ignore */ }
-      }
+    function startCuratedPlaylist(p, era) {
+      const list = curatedPlaylistId(era);
+      if (!p || !list) return false;
       usingPlaylist[era] = true;
-      inMixMode = true;
-      player = playlistPlayers[era];
+      inMixMode = false;
+      player = p;
       try {
-        player.unMute();
-        player.setVolume(80);
-        if (player.setShuffle) player.setShuffle(true);
-        if (player.setLoop) player.setLoop(true);
-        playWithPolicy(player);
+        if (playlistPlayers[era] && playlistPlayers[era] !== p) {
+          playlistPlayers[era].pauseVideo();
+          playlistPlayers[era].mute();
+        }
+        forceUnmute(p);
+        const have = p.getPlaylist && p.getPlaylist();
+        if (!have || !have.length) {
+          p.loadPlaylist({ list: list, listType: "playlist", index: 0 });
+        } else {
+          try { p.playVideoAt(0); } catch (err2) { p.playVideo(); }
+        }
+        if (p.setShuffle) p.setShuffle(true);
+        if (p.setLoop) p.setLoop(true);
+        playWithPolicy(p);
       } catch (err) { /* ignore */ }
+      return true;
+    }
+
+    function switchToPlaylist(era) {
+      const p = players[era];
+      if (!curatedPlaylistId(era) || !p) return false;
+      ignoreEnded = true;
+      songRevealStarted = false;
+      lastProgressT = -1;
+      lastProgressAt = Date.now();
+      setPlaying(false);
+      usingPlaylist[era] = true;
+      inMixMode = false;
+      player = p;
+      mountYtOnScreen(era);
+      startCuratedPlaylist(p, era);
       coverScreen();
       kickPlay(++mediaGen);
+      watchPlayStart(era);
       setTimeout(function () { ignoreEnded = false; }, 800);
       return true;
     }
@@ -2116,6 +2121,7 @@
 
     function beginSongReveal() {
       if (userPaused) return;
+      if (!isReallyPlaying(player)) return;
       const key = currentVideoKey();
       if (songRevealStarted) return;
       songRevealStarted = true;
@@ -2221,6 +2227,7 @@
       inMixMode = !!mixMode[eraId];
       ignoreEnded = true;
       errorStreak = 0;
+      setPlaying(false);
       updateRemoteActive(eraId);
       startEraCooldown();
       trackTitle.textContent = eraObj(eraId).label + " radio";
@@ -2284,9 +2291,18 @@
       try { if (p.setPlaybackQualityRange) p.setPlaybackQualityRange("small", "hd720"); } catch (err) { /* ignore */ }
     }
 
+    function eraPlaybackPlayer(era) {
+      if (usingPlaylist[era] && playlistPlayers[era]) return playlistPlayers[era];
+      return players[era] || null;
+    }
+
     function ytHostFor(era) {
-      if (usingPlaylist[era]) return document.getElementById("yt-pl-" + era);
-      return document.getElementById("yt-" + era);
+      const p = eraPlaybackPlayer(era);
+      try {
+        const iframe = p && p.getIframe && p.getIframe();
+        if (iframe) return iframe;
+      } catch (err) { /* ignore */ }
+      return document.getElementById("yt-pl-" + era) || document.getElementById("yt-" + era);
     }
 
     let ignoreUiPauseUntil = 0;
@@ -2302,7 +2318,7 @@
         ignoreUiPauseUntil = Date.now() + 1600;
       }
       tvScreen.classList.toggle("has-yt", !!active);
-      const p = (usingPlaylist[era] && playlistPlayers[era]) || players[era];
+      const p = eraPlaybackPlayer(era);
       preferVisible(p);
       hideCaptions(p);
     }
@@ -2374,7 +2390,6 @@
         seedArmed[era] = true;
         console.log("[EraTV] armed seed", era);
       } catch (err) { /* ignore */ }
-      if (curatedPlaylistId(era)) createPlaylistPlayer(era);
       schedulePreload(200);
     }
 
@@ -2397,6 +2412,16 @@
         p.unMute();
         p.setVolume(80);
       } catch (err) { /* ignore */ }
+    }
+
+    function isReallyPlaying(p) {
+      if (!p) return false;
+      try {
+        if (p.getPlayerState() !== YT.PlayerState.PLAYING) return false;
+        return (p.getCurrentTime() || 0) > 0.35;
+      } catch (err) {
+        return false;
+      }
     }
 
     function startCurrentPlayback(p) {
@@ -2426,9 +2451,13 @@
         if (gen !== mediaGen || !player || userPaused) return;
         try {
           const state = player.getPlayerState();
-          if (state === YT.PlayerState.PLAYING) {
+          if (isReallyPlaying(player)) {
             forceUnmute(player);
-            if (tries >= 10) return;
+            return;
+          }
+          if (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING) {
+            forceUnmute(player);
+            mountYtOnScreen(currentEra);
           } else {
             startCurrentPlayback(player);
           }
@@ -2458,33 +2487,34 @@
       player = next;
       duration = 0;
       metaVideoId = "";
+      lastProgressT = -1;
+      lastProgressAt = Date.now();
       console.log("[EraTV] activate", era, { armed: !!seedArmed[era], mix: !!mixMode[era] });
 
       pauseOtherPlayers(era);
+      setPlaying(false);
 
       try {
         preferSmall(next);
         applyVolume(next);
-        if (curatedPlaylistId(era) && usingPlaylist[era] && playlistPlayers[era]) {
-          player = playlistPlayers[era];
-          playWithPolicy(player);
-        } else if (curatedPlaylistId(era)) {
-          usingPlaylist[era] = false;
-          if (seedArmed[era]) {
-            next.seekTo(0, true);
-          }
-          playWithPolicy(next);
-          createPlaylistPlayer(era);
+        if (curatedPlaylistId(era)) {
+          usingPlaylist[era] = true;
+          player = next;
+          mountYtOnScreen(era);
+          startCuratedPlaylist(next, era);
         } else if (mixMode[era]) {
           mixMode[era] = false;
           inMixMode = false;
           seedArmed[era] = false;
+          mountYtOnScreen(era);
           next.loadVideoById(seedId(era));
           playWithPolicy(next);
         } else if (seedArmed[era]) {
+          mountYtOnScreen(era);
           next.seekTo(0, true);
           playWithPolicy(next);
         } else {
+          mountYtOnScreen(era);
           playWithPolicy(next);
         }
       } catch (err) {
@@ -2536,23 +2566,21 @@
       unlockAudio();
       userPaused = false;
       songRevealStarted = false;
+      lastProgressT = -1;
+      lastProgressAt = Date.now();
+      setPlaying(false);
       coverScreen();
       const era = currentEra;
       if (!player) return;
+      mountYtOnScreen(era);
       try {
         if (curatedPlaylistId(era)) {
-          if (!usingPlaylist[era]) {
+          const list = player.getPlaylist && player.getPlaylist();
+          if (!usingPlaylist[era] || !list || !list.length) {
             switchToPlaylist(era);
             return;
           }
-          const list = player.getPlaylist && player.getPlaylist();
-          if (!list || !list.length) {
-            player.loadPlaylist({
-              list: curatedPlaylistId(era),
-              listType: "playlist",
-              index: dir > 0 ? 1 : 0
-            });
-          } else if (dir > 0) {
+          if (dir > 0) {
             if (playlistAtEnd()) player.playVideoAt(0);
             else player.nextVideo();
           } else {
@@ -2568,6 +2596,7 @@
         playWithPolicy(player);
       } catch (err) { /* ignore */ }
       kickPlay(++mediaGen);
+      watchPlayStart(era);
     }
 
     function createEraPlayer(era) {
@@ -2575,17 +2604,27 @@
       const host = document.createElement("div");
       host.id = "yt-" + era;
       ytDock.appendChild(host);
-      players[era] = new YT.Player(host.id, {
+      const vars = playerVars();
+      const list = curatedPlaylistId(era);
+      const opts = {
         width: 320,
         height: 180,
-        videoId: seedId(era),
-        playerVars: playerVars(),
+        playerVars: vars,
         events: {
           onReady: function () { onEraPlayerReady(era); },
           onStateChange: function (event) { onEraStateChange(era, event); },
           onError: function (event) { onEraError(era, event); }
         }
-      });
+      };
+      if (list) {
+        vars.list = list;
+        vars.listType = "playlist";
+        vars.index = 0;
+        usingPlaylist[era] = true;
+      } else {
+        opts.videoId = seedId(era);
+      }
+      players[era] = new YT.Player(host.id, opts);
     }
 
     window.onYouTubeIframeAPIReady = function () {
@@ -2603,6 +2642,11 @@
         } else {
           players[era].mute();
           players[era].setVolume(0);
+        }
+        if (curatedPlaylistId(era) && players[era].setShuffle) {
+          usingPlaylist[era] = true;
+          players[era].setShuffle(true);
+          if (players[era].setLoop) players[era].setLoop(true);
         }
       } catch (err) { /* ignore */ }
 
@@ -2630,7 +2674,7 @@
 
     function onEraStateChange(era, event) {
       const state = event.data;
-      const p = (usingPlaylist[era] && playlistPlayers[era]) || players[era];
+      let p = eraPlaybackPlayer(era) || players[era];
       if (!p) return;
 
       if (era !== currentEra) {
@@ -2645,9 +2689,14 @@
         return;
       }
 
-      if (player && event.target && event.target !== player) return;
+      if (event.target === players[era] || event.target === playlistPlayers[era]) {
+        player = event.target;
+        p = player;
+      } else if (player && event.target && event.target !== player) {
+        return;
+      }
 
-      if (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING) {
+      if (state === YT.PlayerState.PLAYING && isReallyPlaying(p)) {
         userPaused = false;
         setPlaying(true);
       } else if (state === YT.PlayerState.PAUSED && userPaused) {
@@ -2661,11 +2710,7 @@
         state === YT.PlayerState.CUED
       ) {
         errorStreak = 0;
-        if (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING) {
-          if (playWatchTimer) {
-            clearTimeout(playWatchTimer);
-            playWatchTimer = null;
-          }
+        if (state === YT.PlayerState.PLAYING) {
           ignoreEnded = false;
           seedArmed[era] = true;
           preferVisible(p);
@@ -2673,9 +2718,18 @@
           if (era === "now") nowHasPlayed = true;
           mountYtOnScreen(era);
           forceUnmute(p);
-          if (state === YT.PlayerState.PLAYING) beginSongReveal();
+          if (isReallyPlaying(p)) {
+            if (playWatchTimer) {
+              clearTimeout(playWatchTimer);
+              playWatchTimer = null;
+            }
+            setPlaying(true);
+            beginSongReveal();
+          }
           schedulePreload(era === "now" ? 1500 : 400);
-          if (curatedPlaylistId(era) && !usingPlaylist[era]) createPlaylistPlayer(era);
+        } else if (state === YT.PlayerState.BUFFERING) {
+          mountYtOnScreen(era);
+          forceUnmute(p);
         }
         syncMeta();
       }
@@ -2703,54 +2757,40 @@
       if (playWatchTimer) clearTimeout(playWatchTimer);
       playWatchTimer = setTimeout(function () {
         playWatchTimer = null;
-        if (era !== currentEra || !player) return;
-        try {
-          const st = player.getPlayerState();
-          if (
-            st === YT.PlayerState.PLAYING ||
-            st === YT.PlayerState.BUFFERING
-          ) return;
-          if (st === YT.PlayerState.PAUSED) {
-            if (awaitingFirstPlay || !playing) return;
-            startCurrentPlayback(player);
-            return;
-          }
-          startCurrentPlayback(player);
-        } catch (err) { /* ignore */ }
+        if (era !== currentEra || !player || userPaused) return;
+        if (isReallyPlaying(player)) return;
+        mountYtOnScreen(era);
+        forceUnmute(player);
+        startCurrentPlayback(player);
         playWatchTimer = setTimeout(function () {
           playWatchTimer = null;
-          if (era !== currentEra || !player) return;
-          try {
-            const st = player.getPlayerState();
-            if (
-              st === YT.PlayerState.PLAYING ||
-              st === YT.PlayerState.BUFFERING ||
-              st === YT.PlayerState.PAUSED
-            ) return;
-          } catch (err2) { /* ignore */ }
+          if (era !== currentEra || !player || userPaused) return;
+          if (isReallyPlaying(player)) return;
           skipBlockedVideo(era);
         }, 2200);
-      }, 3200);
+      }, 2800);
     }
 
     function skipBlockedVideo(era) {
       coverScreen();
-      if (curatedPlaylistId(era) && !usingPlaylist[era]) {
-        const next = rerollSessionSeed(era);
-        if (next && players[era]) {
-          try { players[era].loadVideoById(next); } catch (err) { /* ignore */ }
-          watchPlayStart(era);
-          return;
-        }
-        switchToPlaylist(era);
-        watchPlayStart(era);
-        return;
-      }
+      setPlaying(false);
+      lastProgressT = -1;
+      lastProgressAt = Date.now();
       if (curatedPlaylistId(era)) {
+        usingPlaylist[era] = true;
+        player = players[era] || player;
+        mountYtOnScreen(era);
         try {
-          if (player && playlistAtEnd()) player.playVideoAt(0);
-          else if (player) player.nextVideo();
+          const list = player && player.getPlaylist && player.getPlaylist();
+          if (!list || !list.length) {
+            switchToPlaylist(era);
+            return;
+          }
+          if (playlistAtEnd()) player.playVideoAt(0);
+          else player.nextVideo();
+          playWithPolicy(player);
         } catch (err) { /* ignore */ }
+        kickPlay(++mediaGen);
         watchPlayStart(era);
         return;
       }
@@ -2777,25 +2817,11 @@
 
       if (code === 153) {
         lockReferrer();
-        if (errorStreak < 2) {
-          if (curatedPlaylistId(era) && !usingPlaylist[era]) players[era].loadVideoById(rerollSessionSeed(era));
-          else loadEraAudio(players[era], era);
-        } else {
-          skipBlockedVideo(era);
-        }
+        skipBlockedVideo(era);
         return;
       }
 
-      if (errorStreak < 3) {
-        seedArmed[era] = false;
-        if (curatedPlaylistId(era) && !usingPlaylist[era]) {
-          players[era].loadVideoById(rerollSessionSeed(era));
-        } else {
-          skipBlockedVideo(era);
-        }
-      } else {
-        skipBlockedVideo(era);
-      }
+      skipBlockedVideo(era);
     }
 
     function unlockAudio() {
@@ -2841,6 +2867,8 @@
     }
 
     let metaVideoId = "";
+    let lastProgressT = -1;
+    let lastProgressAt = 0;
     function syncMeta() {
       if (!player || !player.getVideoData) return;
       try {
@@ -2848,6 +2876,8 @@
         if (data.video_id && data.video_id !== metaVideoId) {
           metaVideoId = data.video_id;
           duration = 0;
+          lastProgressT = -1;
+          lastProgressAt = Date.now();
         }
         const parsed = parseMeta(data);
         if (parsed) {
@@ -2863,13 +2893,27 @@
         timeDuration.textContent = formatTime(duration);
         seekFill.style.width = duration ? ((t / duration) * 100).toFixed(2) + "%" : "0%";
         const state = player.getPlayerState && player.getPlayerState();
-        if (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING) {
+        if (isReallyPlaying(player)) {
           setPlaying(true);
           if (audioUnlocked) forceUnmute(player);
-          if (!userPaused && state === YT.PlayerState.PLAYING && !songRevealStarted) beginSongReveal();
+          if (!userPaused) beginSongReveal();
+          if (t > lastProgressT + 0.12) {
+            lastProgressT = t;
+            lastProgressAt = Date.now();
+          }
         } else if (state === YT.PlayerState.PAUSED && userPaused) {
           setPlaying(false);
           coverScreen();
+        } else if (
+          !userPaused &&
+          !awaitingFirstPlay &&
+          (state === YT.PlayerState.PLAYING || state === YT.PlayerState.BUFFERING) &&
+          lastProgressAt &&
+          Date.now() - lastProgressAt > 4000 &&
+          t < 0.5
+        ) {
+          lastProgressAt = Date.now();
+          skipBlockedVideo(currentEra);
         }
       } catch (err) { /* ignore */ }
     }
@@ -2904,6 +2948,7 @@
       }
       forceUnmute(player);
       try { player.playVideo(); } catch (err) { /* ignore */ }
+      watchPlayStart(currentEra);
     }
 
     playBtn.addEventListener("click", togglePlayback);
@@ -2939,7 +2984,7 @@
     holdNowScreen();
     setControlsEnabled(true);
     setArtwork(seedId(DEFAULT_ERA));
-    setInterval(syncMeta, 500);
+    setInterval(syncMeta, 250);
     ["pointerdown", "keydown", "touchstart"].forEach(function (type) {
       document.addEventListener(type, unlockAudio, true);
     });
