@@ -545,9 +545,10 @@
       background: #000;
     }
     .screen-noise.active { opacity: 1; }
-    .screen-noise.active.is-fading {
-      opacity: 0;
-      transition: opacity 1s ease;
+    .screen-noise.active.is-playing {
+      opacity: 0.2;
+      background: transparent;
+      transition: opacity 1s ease, background 1s ease;
     }
     .tv-screen.is-static .yt-stage,
     .tv-screen.is-static .screen-video {
@@ -2069,6 +2070,7 @@
     function startNoise(gen) {
       switchingEra = true;
       screenNoise.classList.remove("is-fading");
+      screenNoise.classList.remove("is-playing");
       screenNoise.classList.add("active");
       screenContent.classList.add("transitioning");
       cancelAnimationFrame(noiseRaf);
@@ -2116,18 +2118,15 @@
       coveredVideoKey = key || coveredVideoKey;
       const gen = screenGen;
       if (!screenNoise.classList.contains("active")) startNoise(gen);
-      else screenNoise.classList.remove("is-fading");
+      screenNoise.classList.remove("is-playing");
       clearNoiseTimers();
       noiseHoldTimer = setTimeout(function () {
         noiseHoldTimer = null;
-        if (gen !== screenGen) return;
+        if (gen !== screenGen || userPaused) return;
         tvScreen.classList.remove("is-static");
-        screenNoise.classList.add("is-fading");
-        noiseFadeTimer = setTimeout(function () {
-          noiseFadeTimer = null;
-          if (gen !== screenGen) return;
-          stopNoise(gen);
-        }, 1000);
+        screenContent.classList.remove("transitioning");
+        switchingEra = false;
+        screenNoise.classList.add("is-playing");
       }, 3000);
     }
 
@@ -2136,6 +2135,7 @@
       cancelAnimationFrame(noiseRaf);
       screenNoise.classList.remove("active");
       screenNoise.classList.remove("is-fading");
+      screenNoise.classList.remove("is-playing");
       screenContent.classList.remove("transitioning");
       tvScreen.classList.remove("is-static");
       switchingEra = false;
@@ -2604,9 +2604,10 @@
 
       if (player && event.target && event.target !== player) return;
 
-      if (state === YT.PlayerState.PLAYING) setPlaying(true);
-      else if (state === YT.PlayerState.PAUSED && Date.now() > ignoreUiPauseUntil) {
-        userPaused = true;
+      if (state === YT.PlayerState.PLAYING) {
+        userPaused = false;
+        setPlaying(true);
+      } else if (state === YT.PlayerState.PAUSED && userPaused) {
         setPlaying(false);
         coverScreen();
       }
@@ -2628,12 +2629,7 @@
           hideCaptions(p);
           if (era === "now") nowHasPlayed = true;
           mountYtOnScreen(era);
-          startCurrentPlayback(p);
           forceUnmute(p);
-          try { p.playVideo(); } catch (err) { /* ignore */ }
-          try {
-            if (!(p.isMuted && p.isMuted())) audioUnlocked = true;
-          } catch (err) { /* ignore */ }
           beginSongReveal();
           schedulePreload(era === "now" ? 1500 : 400);
           if (curatedPlaylistId(era) && !usingPlaylist[era]) createPlaylistPlayer(era);
@@ -2820,11 +2816,10 @@
         if (state === YT.PlayerState.PLAYING) {
           setPlaying(true);
           if (audioUnlocked) forceUnmute(player);
-        } else if (state === YT.PlayerState.PAUSED && Date.now() > ignoreUiPauseUntil) {
+          if (!userPaused && !songRevealStarted) beginSongReveal();
+        } else if (state === YT.PlayerState.PAUSED && userPaused) {
           setPlaying(false);
-          if (!screenNoise.classList.contains("active") || screenNoise.classList.contains("is-fading")) {
-            coverScreen();
-          }
+          coverScreen();
         }
       } catch (err) { /* ignore */ }
     }
