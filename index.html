@@ -1318,6 +1318,7 @@
         seed: "br6C4U3Dyfo",
         ids: [
           "br6C4U3Dyfo",   // Lag Ja Gale — Woh Kaun Thi (1964)
+          "Nw7lcCNSYy8",   // Mere Sapno Ki Rani — Aradhana (1969)
           "2ca43nTQUL0",   // Ehsaan Tera Hoga Mujh Par — Junglee (1961)
           "BpLyDTEw3Z4"    // Aaj Phir Jeene Ki Tamanna Hai — Guide (1965)
         ]
@@ -1402,6 +1403,8 @@
     const playlistPlayers = {};
     const playlistReady = {};
     const usingPlaylist = {};
+    const playlistFailed = {};
+    const skipStreak = {};
     const playerReadyMap = {};
     const seedArmed = {};
     const mixMode = {};
@@ -1864,9 +1867,29 @@
       });
     }
 
+    function startFallbackQueue(p, era) {
+      const ids = eraQueue(era);
+      if (!p || !ids.length) return false;
+      playlistFailed[era] = true;
+      usingPlaylist[era] = true;
+      inMixMode = false;
+      player = p;
+      console.log("[EraTV] fallback queue", era, ids);
+      try {
+        forceUnmute(p);
+        p.loadPlaylist({ playlist: ids, index: 0 });
+        if (p.setLoop) p.setLoop(true);
+        playWithPolicy(p);
+      } catch (err) {
+        try { p.loadVideoById(ids[0]); playWithPolicy(p); } catch (e2) { /* ignore */ }
+      }
+      return true;
+    }
+
     function startCuratedPlaylist(p, era) {
+      if (playlistFailed[era]) return startFallbackQueue(p, era);
       const list = curatedPlaylistId(era);
-      if (!p || !list) return false;
+      if (!p || !list) return startFallbackQueue(p, era);
       usingPlaylist[era] = true;
       inMixMode = false;
       player = p;
@@ -1885,7 +1908,9 @@
         if (p.setShuffle) p.setShuffle(true);
         if (p.setLoop) p.setLoop(true);
         playWithPolicy(p);
-      } catch (err) { /* ignore */ }
+      } catch (err) {
+        return startFallbackQueue(p, era);
+      }
       return true;
     }
 
@@ -2625,27 +2650,17 @@
       const home = (era === currentEra && ytStage) ? ytStage : ytDock;
       home.appendChild(host);
       if (era === currentEra) tvScreen.classList.add("has-yt");
-      const vars = playerVars();
-      const list = curatedPlaylistId(era);
-      const opts = {
+      players[era] = new YT.Player(host.id, {
         width: 320,
         height: 180,
-        playerVars: vars,
+        videoId: seedId(era),
+        playerVars: playerVars(),
         events: {
           onReady: function () { onEraPlayerReady(era); },
           onStateChange: function (event) { onEraStateChange(era, event); },
           onError: function (event) { onEraError(era, event); }
         }
-      };
-      if (list) {
-        vars.list = list;
-        vars.listType = "playlist";
-        vars.index = 0;
-        usingPlaylist[era] = true;
-      } else {
-        opts.videoId = seedId(era);
-      }
-      players[era] = new YT.Player(host.id, opts);
+      });
     }
 
     window.onYouTubeIframeAPIReady = function () {
@@ -2663,11 +2678,6 @@
         } else {
           players[era].mute();
           players[era].setVolume(0);
-        }
-        if (curatedPlaylistId(era) && players[era].setShuffle) {
-          usingPlaylist[era] = true;
-          players[era].setShuffle(true);
-          if (players[era].setLoop) players[era].setLoop(true);
         }
       } catch (err) { /* ignore */ }
 
@@ -2740,6 +2750,7 @@
           mountYtOnScreen(era);
           forceUnmute(p);
           if (isPlaybackGoing(p) || isReallyPlaying(p)) {
+            skipStreak[era] = 0;
             if (playWatchTimer) {
               clearTimeout(playWatchTimer);
               playWatchTimer = null;
@@ -2821,14 +2832,23 @@
       setPlaying(false);
       lastProgressT = -1;
       lastProgressAt = Date.now();
-      if (curatedPlaylistId(era)) {
+      skipStreak[era] = (skipStreak[era] || 0) + 1;
+      player = players[era] || player;
+      mountYtOnScreen(era);
+      if (!playlistFailed[era] && (skipStreak[era] >= 2 || !(player && player.getPlaylist && player.getPlaylist() && player.getPlaylist().length))) {
+        startFallbackQueue(player, era);
+        kickPlay(++mediaGen);
+        watchPlayStart(era);
+        return;
+      }
+      if (curatedPlaylistId(era) || playlistFailed[era]) {
         usingPlaylist[era] = true;
-        player = players[era] || player;
-        mountYtOnScreen(era);
         try {
           const list = player && player.getPlaylist && player.getPlaylist();
           if (!list || !list.length) {
-            switchToPlaylist(era);
+            startFallbackQueue(player, era);
+            kickPlay(++mediaGen);
+            watchPlayStart(era);
             return;
           }
           if (playlistAtEnd()) player.playVideoAt(0);
