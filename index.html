@@ -543,7 +543,7 @@
       z-index: 6;
       transition: none;
     }
-    .screen-noise.active { opacity: 1; }
+    .screen-noise.active { opacity: 0.48; }
     .screen-noise.active.is-fading {
       opacity: 0;
       transition: opacity 1s ease;
@@ -1435,6 +1435,7 @@
     let noiseHoldTimer = null;
     let noiseFadeTimer = null;
     let coveredVideoKey = "";
+    let songRevealStarted = false;
 
     /* ==========================================================
        DOM REFERENCES
@@ -1859,8 +1860,7 @@
           p.loadPlaylist({ list: curatedPlaylistId(era), listType: "playlist", index: 0 });
           if (p.setShuffle) p.setShuffle(true);
           if (p.setLoop) p.setLoop(true);
-          p.unMute();
-          p.setVolume(80);
+          playWithPolicy(p);
         } catch (err) { /* ignore */ }
         coverScreen();
         kickPlay(++mediaGen);
@@ -1878,7 +1878,7 @@
         player.setVolume(80);
         if (player.setShuffle) player.setShuffle(true);
         if (player.setLoop) player.setLoop(true);
-        player.playVideo();
+        playWithPolicy(player);
       } catch (err) { /* ignore */ }
       coverScreen();
       kickPlay(++mediaGen);
@@ -1972,7 +1972,7 @@
       for (let i = 0; i < d.length; i += 4) {
         const v = Math.random() > 0.5 ? 255 : 0;
         d[i] = d[i + 1] = d[i + 2] = v;
-        d[i + 3] = 140;
+        d[i + 3] = 88;
       }
       noiseCtx.putImageData(imageData, 0, 0);
     }
@@ -2049,6 +2049,7 @@
     }
 
     function coverScreen() {
+      songRevealStarted = false;
       clearNoiseTimers();
       startNoise(screenGen);
     }
@@ -2065,10 +2066,12 @@
 
     function beginSongReveal() {
       const key = currentVideoKey();
-      if (key && key === coveredVideoKey && noiseHoldTimer) return;
+      if (songRevealStarted) return;
+      songRevealStarted = true;
       coveredVideoKey = key || coveredVideoKey;
       const gen = screenGen;
-      startNoise(gen);
+      if (!screenNoise.classList.contains("active")) startNoise(gen);
+      else screenNoise.classList.remove("is-fading");
       clearNoiseTimers();
       noiseHoldTimer = setTimeout(function () {
         noiseHoldTimer = null;
@@ -2131,6 +2134,7 @@
     function playStaticTransition(eraId, callback) {
       const gen = ++screenGen;
       coveredVideoKey = "";
+      songRevealStarted = false;
       clearNoiseTimers();
       abortEraVideo();
       startNoise(gen);
@@ -2185,6 +2189,7 @@
         if (!root) return;
         root.querySelectorAll("iframe").forEach(function (iframe) {
           iframe.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+          iframe.setAttribute("allow", "autoplay; encrypted-media; picture-in-picture");
         });
       });
     }
@@ -2197,7 +2202,8 @@
         modestbranding: 1,
         rel: 0,
         playsinline: 1,
-        autoplay: 0,
+        autoplay: 1,
+        mute: 1,
         cc_load_policy: 0,
         iv_load_policy: 3
       };
@@ -2331,6 +2337,24 @@
       }
     }
 
+    function applyVolume(p) {
+      if (!p) return;
+      try {
+        if (audioUnlocked) {
+          p.unMute();
+          p.setVolume(80);
+        } else {
+          p.mute();
+        }
+      } catch (err) { /* ignore */ }
+    }
+
+    function playWithPolicy(p) {
+      if (!p) return;
+      applyVolume(p);
+      try { p.playVideo(); } catch (err) { /* ignore */ }
+    }
+
     function kickPlay(gen) {
       if (playKickTimer) clearTimeout(playKickTimer);
       let tries = 0;
@@ -2338,16 +2362,14 @@
         if (gen !== mediaGen || !player) return;
         try {
           const state = player.getPlayerState();
-          if (state === YT.PlayerState.PLAYING) return;
-          player.unMute();
-          player.setVolume(80);
-          player.playVideo();
+          if (state === YT.PlayerState.PLAYING) {
+            applyVolume(player);
+            return;
+          }
+          playWithPolicy(player);
         } catch (err) { /* ignore */ }
         tries += 1;
-        if (tries < 10) playKickTimer = setTimeout(tick, 350);
-        else if (gen === mediaGen) {
-          trackArtist.textContent = "Press play if audio is blocked";
-        }
+        if (tries < 12) playKickTimer = setTimeout(tick, 280);
       }
       playKickTimer = setTimeout(tick, 60);
     }
@@ -2374,40 +2396,36 @@
 
       try {
         preferSmall(next);
-        next.unMute();
-        next.setVolume(80);
+        applyVolume(next);
         if (curatedPlaylistId(era) && usingPlaylist[era] && playlistPlayers[era]) {
           player = playlistPlayers[era];
-          player.unMute();
-          player.setVolume(80);
-          player.playVideo();
+          playWithPolicy(player);
         } else if (curatedPlaylistId(era)) {
           usingPlaylist[era] = false;
           if (seedArmed[era]) {
             next.seekTo(0, true);
-            next.playVideo();
-          } else {
-            next.playVideo();
           }
+          playWithPolicy(next);
           createPlaylistPlayer(era);
         } else if (mixMode[era]) {
           mixMode[era] = false;
           inMixMode = false;
           seedArmed[era] = false;
           next.loadVideoById(seedId(era));
+          playWithPolicy(next);
         } else if (seedArmed[era]) {
           next.seekTo(0, true);
-          next.playVideo();
+          playWithPolicy(next);
         } else {
-          next.playVideo();
+          playWithPolicy(next);
         }
       } catch (err) {
-        try { loadEraAudio(next, era); } catch (e2) { /* ignore */ }
+        try { loadEraAudio(next, era); playWithPolicy(next); } catch (e2) { /* ignore */ }
       }
 
       coverScreen();
       kickPlay(gen);
-      if (audioUnlocked && curatedPlaylistId(era)) watchPlayStart(era);
+      if (curatedPlaylistId(era)) watchPlayStart(era);
       setTimeout(function () {
         if (gen === mediaGen) ignoreEnded = false;
       }, 800);
@@ -2426,8 +2444,7 @@
         p.loadPlaylist({ list: mix, listType: "playlist", index: 0 });
         if (p.setShuffle) p.setShuffle(true);
         if (p.setLoop) p.setLoop(true);
-        p.unMute();
-        p.setVolume(80);
+        playWithPolicy(p);
       } catch (err) {
         console.warn("[EraTV] mix failed", err);
         mixMode[era] = false;
@@ -2473,7 +2490,15 @@
       playerReadyMap[era] = true;
       lockReferrer();
       preferSmall(players[era]);
-      try { players[era].setVolume(era === currentEra ? 80 : 0); } catch (err) { /* ignore */ }
+      try {
+        if (era === currentEra && audioUnlocked) {
+          players[era].unMute();
+          players[era].setVolume(80);
+        } else {
+          players[era].mute();
+          players[era].setVolume(era === currentEra ? 80 : 0);
+        }
+      } catch (err) { /* ignore */ }
 
       if (era === "now") {
         playerReady = true;
@@ -2527,13 +2552,17 @@
           preferVisible(p);
           hideCaptions(p);
           if (era === "now") nowHasPlayed = true;
+          applyVolume(p);
+          try {
+            p.unMute();
+            p.setVolume(80);
+            if (!(p.isMuted && p.isMuted())) audioUnlocked = true;
+            else applyVolume(p);
+          } catch (err) { /* ignore */ }
           mountYtOnScreen(era);
           beginSongReveal();
           schedulePreload(era === "now" ? 1500 : 400);
           if (curatedPlaylistId(era) && !usingPlaylist[era]) createPlaylistPlayer(era);
-        } else if (state === YT.PlayerState.BUFFERING || state === YT.PlayerState.CUED) {
-          const key = currentVideoKey();
-          if (key && key !== coveredVideoKey) coverScreen();
         }
         syncMeta();
       }
@@ -2558,7 +2587,6 @@
 
     let playWatchTimer = null;
     function watchPlayStart(era) {
-      if (!audioUnlocked) return;
       if (playWatchTimer) clearTimeout(playWatchTimer);
       playWatchTimer = setTimeout(function () {
         playWatchTimer = null;
@@ -2644,13 +2672,9 @@
       if (audioUnlocked) return;
       audioUnlocked = true;
       if (player) {
-        try {
-          player.unMute();
-          player.setVolume(80);
-          if (!playing) player.playVideo();
-        } catch (err) { /* ignore */ }
+        applyVolume(player);
+        try { if (!playing) player.playVideo(); } catch (err) { /* ignore */ }
       }
-      if (curatedPlaylistId(currentEra)) watchPlayStart(currentEra);
       schedulePreload(400);
     }
 
