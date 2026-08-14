@@ -1433,6 +1433,7 @@
     let playKickTimer = null;
     let audioUnlocked = false;
     let nowHasPlayed = false;
+    let awaitingFirstPlay = true;
     let preloadTimer = null;
     let lastEraChangeAt = 0;
     let eraCooldownTimer = 0;
@@ -2191,9 +2192,10 @@
        ========================================================== */
     function changeEra(eraId) {
       if (!eraPlaylists[eraId]) return;
+      awaitingFirstPlay = false;
       unlockAudio();
       if (eraId === currentEra) {
-        if (!playing && players[eraId]) activateEraAudio(eraId);
+        if (!playing) activateEraAudio(eraId);
         return;
       }
       if (cooldownRemaining() > 0) return;
@@ -2238,8 +2240,8 @@
         modestbranding: 1,
         rel: 0,
         playsinline: 1,
-        autoplay: 1,
-        mute: 1,
+        autoplay: 0,
+        mute: 0,
         cc_load_policy: 0,
         iv_load_policy: 3
       };
@@ -2553,6 +2555,14 @@
         setControlsEnabled(true);
       }
 
+      if (era === currentEra && awaitingFirstPlay) {
+        player = players[era];
+        try { player.pauseVideo(); player.mute(); } catch (err) { /* ignore */ }
+        coverScreen();
+        setPlaying(false);
+        return;
+      }
+
       if (pendingEra === era || era === currentEra) {
         activateEraAudio(era);
       } else {
@@ -2582,7 +2592,10 @@
       if (player && event.target && event.target !== player) return;
 
       if (state === YT.PlayerState.PLAYING) setPlaying(true);
-      else if (state === YT.PlayerState.PAUSED && Date.now() > ignoreUiPauseUntil) setPlaying(false);
+      else if (state === YT.PlayerState.PAUSED && Date.now() > ignoreUiPauseUntil) {
+        setPlaying(false);
+        coverScreen();
+      }
       if (
         state === YT.PlayerState.PLAYING ||
         state === YT.PlayerState.PAUSED ||
@@ -2642,10 +2655,11 @@
           const st = player.getPlayerState();
           if (
             st === YT.PlayerState.PLAYING ||
-            st === YT.PlayerState.BUFFERING ||
-            st === YT.PlayerState.PAUSED
-          ) {
-            if (st !== YT.PlayerState.PLAYING) startCurrentPlayback(player);
+            st === YT.PlayerState.BUFFERING
+          ) return;
+          if (st === YT.PlayerState.PAUSED) {
+            if (awaitingFirstPlay || !playing) return;
+            startCurrentPlayback(player);
             return;
           }
           startCurrentPlayback(player);
@@ -2791,8 +2805,13 @@
         const state = player.getPlayerState && player.getPlayerState();
         if (state === YT.PlayerState.PLAYING) {
           setPlaying(true);
-          forceUnmute(player);
-        } else if (state === YT.PlayerState.PAUSED && Date.now() > ignoreUiPauseUntil) setPlaying(false);
+          if (audioUnlocked) forceUnmute(player);
+        } else if (state === YT.PlayerState.PAUSED && Date.now() > ignoreUiPauseUntil) {
+          setPlaying(false);
+          if (!screenNoise.classList.contains("active") || screenNoise.classList.contains("is-fading")) {
+            coverScreen();
+          }
+        }
       } catch (err) { /* ignore */ }
     }
 
@@ -2805,11 +2824,25 @@
     }
 
     function togglePlayback() {
+      awaitingFirstPlay = false;
       unlockAudio();
-      if (!player) return;
-      player.unMute();
-      if (playing) player.pauseVideo();
-      else player.playVideo();
+      if (!players[currentEra] && !player) {
+        activateEraAudio(currentEra);
+        return;
+      }
+      if (!player) player = players[currentEra];
+      if (playing) {
+        try { player.pauseVideo(); } catch (err) { /* ignore */ }
+        coverScreen();
+        setPlaying(false);
+        return;
+      }
+      if (!loadedEra) {
+        activateEraAudio(currentEra);
+        return;
+      }
+      forceUnmute(player);
+      try { player.playVideo(); } catch (err) { /* ignore */ }
     }
 
     playBtn.addEventListener("click", togglePlayback);
@@ -2858,6 +2891,7 @@
        ========================================================== */
     buildRemote();
     holdNowScreen();
+    setControlsEnabled(true);
     setArtwork(seedId(DEFAULT_ERA));
     setInterval(syncMeta, 500);
     ["pointerdown", "keydown", "touchstart"].forEach(function (type) {
